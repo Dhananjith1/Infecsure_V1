@@ -20,7 +20,6 @@ import math
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-import numpy as np
 import pandas as pd
 
 # ML imports — wrapped in try/except for graceful degradation in test mode
@@ -79,71 +78,93 @@ def _pathogen_risk_to_numeric(risk_level: str) -> float:
     )
 
 
-# ─── 1. Z-Score Anomaly Detection ────────────────────────────────────────────
+# ─── 1. Z-Score Anomaly Detection (SAFE - NO NUMPY) ───────────────────────────
 
 def detect_anomaly(pathogen_id: str, new_count: int) -> dict[str, Any]:
     """
     Compute Z-Score for a new pathogen count against historical distribution.
-    Updates rolling stats in Firestore `pathogen_stats` collection.
-
-    Returns:
-        {
-            "is_anomaly": bool,
-            "z_score": float,
-            "message": str | None,
-            "severity": "warning" | "critical" | None
-        }
+    Safe version — handles missing numpy, empty history, and Firestore errors.
     """
-    # Fetch rolling stats from Firestore
-    stats = fs.get_pathogen_stats(pathogen_id)
+    try:
+        # Fetch rolling stats from Firestore
+        stats = fs.get_pathogen_stats(pathogen_id)
 
-    if stats is None or stats.get("count", 0) < 5:
-        # Insufficient history — just record and return safe
-        history = fs.get_pathogen_history(pathogen_id, limit=90)
-        counts = [r.get("colony_count", 1) for r in history if r.get("colony_count") is not None]
-        counts.append(new_count)
-        mean = float(np.mean(counts)) if counts else float(new_count)
-        std = float(np.std(counts)) if len(counts) > 1 else 0.0
-        fs.upsert_pathogen_stats(pathogen_id, mean, std, len(counts))
-        return {"is_anomaly": False, "z_score": 0.0, "message": "Insufficient history", "severity": None}
+        if stats is None or stats.get("count", 0) < 5:
+            # Insufficient history — safe pure-python fallback
+            try:
+                history = fs.get_pathogen_history(pathogen_id, limit=90) or []
+                counts = [r.get("colony_count", 1) for r in history if r.get("colony_count") is not None]
+            except Exception:
+                counts = []
 
-    mean = stats["mean"]
-    std = stats["std"]
-    count = stats["count"]
+            counts.append(new_count)
 
-    # Avoid division by zero
-    if std == 0.0:
-        z = 0.0
-    else:
-        z = (new_count - mean) / std
+            if len(counts) > 1:
+                mean = sum(counts) / len(counts)
+                variance = sum((x - mean) ** 2 for x in counts) / len(counts)
+                std = variance ** 0.5
+            else:
+                mean = float(new_count)
+                std = 0.0
 
-    # Update rolling mean / std using Welford's online algorithm
-    new_count_total = count + 1
-    delta = new_count - mean
-    new_mean = mean + delta / new_count_total
-    delta2 = new_count - new_mean
-    new_m2 = (std ** 2) * count + delta * delta2
-    new_std = math.sqrt(new_m2 / new_count_total) if new_count_total > 1 else 0.0
+            try:
+                fs.upsert_pathogen_stats(pathogen_id, mean, std, len(counts))
+            except Exception:
+                pass
 
-    fs.upsert_pathogen_stats(pathogen_id, new_mean, new_std, new_count_total)
+            return {
+                "is_anomaly": False,
+                "z_score": 0.0,
+                "message": "Insufficient history",
+                "severity": None
+            }
 
-    is_anomaly = abs(z) >= Z_SCORE_WARNING
-    severity = None
-    message = None
+        mean = float(stats.get("mean", 0))
+        std = float(stats.get("std", 0))
+        count = int(stats.get("count", 0))
 
-    if abs(z) >= Z_SCORE_CRITICAL:
-        severity = "critical"
-        message = f"CRITICAL trend break detected (Z={z:.2f}). Immediate ICNO review required."
-    elif abs(z) >= Z_SCORE_WARNING:
-        severity = "warning"
-        message = f"Unusual pathogen frequency detected (Z={z:.2f}). Review recommended."
+        # Avoid division by zero
+        z = (new_count - mean) / std if std > 0 else 0.0
 
-    return {
-        "is_anomaly": is_anomaly,
-        "z_score": round(z, 3),
-        "message": message,
-        "severity": severity,
-    }
+        # Update rolling mean / std using Welford's online algorithm
+        new_count_total = count + 1
+        delta = new_count - mean
+        new_mean = mean + delta / new_count_total
+        delta2 = new_count - new_mean
+        new_m2 = (std ** 2) * count + delta * delta2
+        new_std = math.sqrt(new_m2 / new_count_total) if new_count_total > 1 else 0.0
+
+        try:
+            fs.upsert_pathogen_stats(pathogen_id, new_mean, new_std, new_count_total)
+        except Exception:
+            pass
+
+        is_anomaly = abs(z) >= Z_SCORE_WARNING
+        severity = None
+        message = None
+
+        if abs(z) >= Z_SCORE_CRITICAL:
+            severity = "critical"
+            message = f"CRITICAL trend break detected (Z={z:.2f}). Immediate ICNO review required."
+        elif abs(z) >= Z_SCORE_WARNING:
+            severity = "warning"
+            message = f"Unusual pathogen frequency detected (Z={z:.2f}). Review recommended."
+
+        return {
+            "is_anomaly": is_anomaly,
+            "z_score": round(z, 3),
+            "message": message,
+            "severity": severity,
+        }
+
+    except Exception as e:
+        logger.error(f"detect_anomaly failed: {e}")
+        return {
+            "is_anomaly": False,
+            "z_score": 0.0,
+            "message": "Anomaly detection unavailable",
+            "severity": None
+        }
 
 
 # ─── 2. Random Forest Outbreak Risk Prediction ────────────────────────────────
@@ -211,16 +232,6 @@ def predict_outbreak_risk(ward_id: str) -> dict[str, Any]:
     """
     Use a Random Forest Classifier trained on all historical ward data
     to predict outbreak risk for a given ward.
-
-    Returns:
-        {
-            "ward_id": str,
-            "risk_score": float (0–100),
-            "risk_level": str,
-            "confidence": float,
-            "feature_importance": dict,
-            "alert_created": bool
-        }
     """
     if not ML_AVAILABLE:
         return {"ward_id": ward_id, "risk_score": 0.0, "risk_level": "low",
@@ -232,7 +243,6 @@ def predict_outbreak_risk(ward_id: str) -> dict[str, Any]:
     for w in all_wards:
         fv = _build_feature_vector(w["ward_id"])
         if fv:
-            # Label: 1 if risk_level is high/critical, 0 otherwise
             current_risk = w.get("risk_level", "low")
             fv["label"] = 1 if current_risk in ("high", "critical") else 0
             training_rows.append(fv)
@@ -265,7 +275,6 @@ def predict_outbreak_risk(ward_id: str) -> dict[str, Any]:
     risk_score = float(proba[1]) * 100  # probability of HIGH class → 0-100
 
     importance_dict = dict(zip(feature_cols, rf.feature_importances_.tolist()))
-
     risk_level = _risk_level_from_score(risk_score)
 
     # ── Update ward in Firestore ───────────────────────────────────────────
@@ -326,24 +335,14 @@ def _heuristic_fallback_risk(ward_id: str) -> dict[str, Any]:
 # ─── 3. Risk-Weighted Heuristic Engine ───────────────────────────────────────
 
 def calculate_task_priority(ward_ids: Optional[list[str]] = None) -> list[dict[str, Any]]:
-    """
-    Priority = (w1 * C) + (w2 * V) + (w3 * L)
-    where:
-      C = Compliance Deficit  (100 - compliance_score) / 100
-      V = Max Pathogen Virulence (0–1)
-      L = Recent Lab Result Load (normalized)
-
-    Returns a sorted list of wards with priority scores (highest first).
-    """
     if ward_ids is None:
         wards = fs.list_wards()
         ward_ids = [w["ward_id"] for w in wards]
 
     priorities = []
     all_lab_counts = []
-
-    # First pass — collect lab counts for normalization
     ward_data = {}
+
     for wid in ward_ids:
         fv = _build_feature_vector(wid)
         ward = fs.get_ward(wid)
@@ -355,7 +354,6 @@ def calculate_task_priority(ward_ids: Optional[list[str]] = None) -> list[dict[s
     if max_lab == 0:
         max_lab = 1
 
-    # Second pass — compute priority
     for wid in ward_ids:
         fv, ward = ward_data.get(wid, (None, None))
         if not fv or not ward:
@@ -379,10 +377,8 @@ def calculate_task_priority(ward_ids: Optional[list[str]] = None) -> list[dict[s
             "recommended_action": _recommend_action(C, V, fv["anomaly_count"]),
         })
 
-    # Sort descending by priority
     priorities.sort(key=lambda x: x["priority_score"], reverse=True)
 
-    # Rank
     for i, p in enumerate(priorities):
         p["rank"] = i + 1
 
@@ -408,17 +404,9 @@ def find_root_cause_associations(
     min_confidence: float = 0.5,
     min_lift: float = 1.0,
 ) -> list[dict[str, Any]]:
-    """
-    Mine association rules between audit failures and pathogen detections
-    using the Apriori algorithm (via MLxtend).
-
-    Returns a list of association rules with antecedents → consequents.
-    """
     if not ML_AVAILABLE:
         return [{"error": "MLxtend not available"}]
 
-    # ── Build transaction dataset ──────────────────────────────────────────
-    # Each transaction = a ward in a time window, items = audit failures + pathogens
     all_wards = fs.list_wards()
     transactions = []
 
@@ -426,7 +414,6 @@ def find_root_cause_associations(
         wid = ward["ward_id"]
         items = set()
 
-        # Add audit failure items
         audits = fs.list_audits_for_ward(wid, limit=10)
         for audit in audits:
             if audit.get("hand_hygiene_score", 100) < 70:
@@ -438,11 +425,9 @@ def find_root_cause_associations(
             if audit.get("environmental_score", 100) < 70:
                 items.add("FAIL:environmental")
 
-        # Add pathogen items from lab results
         lab_results = fs.list_lab_results(ward_id=wid, limit=50)
         for result in lab_results:
             pathogen_name = result.get("pathogen_name", "unknown")
-            # Sanitize to item string
             items.add(f"PATHOGEN:{pathogen_name.replace(' ', '_').upper()}")
             if result.get("anomaly", {}) and result["anomaly"].get("is_anomaly"):
                 items.add("EVENT:anomaly_detected")
@@ -453,7 +438,6 @@ def find_root_cause_associations(
     if len(transactions) < 3:
         return [{"message": "Insufficient transaction data for association mining. Add more ward audit and lab data."}]
 
-    # ── Apriori ────────────────────────────────────────────────────────────
     te = TransactionEncoder()
     te_array = te.fit_transform(transactions)
     df_enc = pd.DataFrame(te_array, columns=te.columns_)
@@ -469,7 +453,6 @@ def find_root_cause_associations(
     if rules.empty:
         return [{"message": "No significant association rules found with current thresholds."}]
 
-    # Format results
     result = []
     for _, row in rules.iterrows():
         result.append({
@@ -483,7 +466,6 @@ def find_root_cause_associations(
             ),
         })
 
-    # Sort by lift descending
     result.sort(key=lambda x: x["lift"], reverse=True)
     return result
 
@@ -497,13 +479,6 @@ def _interpret_rule(antecedents: list, consequents: list, confidence: float) -> 
 # ─── 5. Dashboard Summary ────────────────────────────────────────────────────
 
 def get_dashboard_summary() -> dict[str, Any]:
-    """
-    Aggregate stats for the ICNO dashboard:
-    - Ward risk distribution
-    - Pending alerts count
-    - Recent anomalies
-    - Overall hospital compliance
-    """
     wards = fs.list_wards()
     risk_distribution = {"low": 0, "medium": 0, "high": 0, "critical": 0}
     total_compliance = 0.0

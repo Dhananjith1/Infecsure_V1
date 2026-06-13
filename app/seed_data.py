@@ -1,69 +1,109 @@
 import requests
-from faker import Faker
-import random
+from datetime import datetime
 
-fake = Faker()
 BASE_URL = "http://localhost:8000"
 
-# =======================================================
-# 1. LOGIN AND OBTAIN JWT ACCESS TOKEN
-# =======================================================
-print("🔑 Attempting to login to the server...")
-login_data = {
-    "email": "icno@infecsure.com",
-    "password": "icnoPassword123"
-}
+print("🔑 Logging in to get access token...")
+login_data = {"email": "icno@infecsure.com", "password": "icnoPassword123"}
 
 try:
     login_response = requests.post(f"{BASE_URL}/auth/login", json=login_data)
     login_response.raise_for_status()
     token = login_response.json().get("access_token")
-    print("✅ Login successful! Token obtained.")
+    headers = {"Authorization": f"Bearer {token}"}
+    print("✅ Login Successful!")
 except Exception as e:
-    print(f"❌ Login failed. Please check if the backend server is running: {e}")
+    print(f"❌ Cannot connect to server. Error: {e}")
     exit()
 
-headers = {
-    "Authorization": f"Bearer {token}",
-    "Content-Type": "application/json"
-}
+print("\n🚀 Injecting Data...\n" + "="*50)
 
-# =======================================================
-# 2. SEED INITIAL WARDS DATA
-# =======================================================
-print("\n🏢 Creating default wards...")
-wards = ["Ward-01 (Male)", "Ward-02 (Female)", "Ward-03 (ICU)", "Ward-04 (Pediatric)", "Ward-05 (Surgical)"]
-ward_ids = ["W01", "W02", "W03", "W04", "W05"]
+def sub_post(label, endpoint, payload):
+    try:
+        res = requests.post(f"{BASE_URL}{endpoint}", json=payload, headers=headers)
+        if res.status_code in (200, 201):
+            print(f"✅ {label} Table Status {res.status_code}!")
+        else:
+            print(f"❌ {label} Table Status {res.status_code}! Backend Error Details:")
+            print(res.json())
+        print("-" * 30)
+        return res
+    except Exception as e:
+        print(f"❌ {label} Failed: {e}")
+        return None
 
-for i in range(5):
-    ward_payload = {
-        "ward_id": ward_ids[i],
-        "name": wards[i],
-        "capacity": random.randint(20, 50)
-    }
-    requests.post(f"{BASE_URL}/wards/", json=ward_payload, headers=headers)
+# 1. Users
+user_res = sub_post("users", "/users/", {
+    "email": f"staff_{datetime.now().strftime('%H%M%S')}@infecsure.com",
+    "password": "staffPassword123",
+    "role": "doctor",
+    "full_name": "Dr. Smith"
+})
+user_id = user_res.json().get("uid") if user_res and user_res.ok else None
+print(f">>> user_id: {user_id}")
 
-pathogens = ["Dengue Virus", "Influenza A", "Salmonella", "MRSA", "Klebsiella"]
-specimens = ["Blood", "Urine", "Nasopharyngeal Swab", "Sputum"]
+# 2. Wards
+ward_res = sub_post("wards", "/wards/", {
+    "name": "ICU Ward",
+    "ward_type": "icu",
+    "floor": "2",
+    "bed_count": 15
+})
+ward_id = ward_res.json().get("ward_id") if ward_res and ward_res.ok else None
+print(f">>> ward_id: {ward_id}")
 
-# =======================================================
-# 3. GENERATE AND INJECT 1000 LAB RESULTS (SYNTHETIC)
-# =======================================================
-print("\n🚀 Injecting 1000 synthetic lab results...")
+if not ward_id:
+    print("❌ Cannot continue — ward_id is None.")
+    exit()
 
-for i in range(1, 1001):
-    dummy_lab_result = {
-        "ward_id": random.choice(ward_ids),
-        "patient_name": fake.name(),
-        "pathogen_name": random.choice(pathogens),
-        "specimen_type": random.choice(specimens),
-        "status": "Positive",
-        "reported_at": fake.date_time_this_year().isoformat()
-    }
-    
-    response = requests.post(f"{BASE_URL}/lab-results/", json=dummy_lab_result, headers=headers)
-    
-    if i % 100 == 0:
-        print(f"📦 Progress: {i}/1000 records successfully sent to Firebase...")
+# 3. Pathogens
+pathogen_res = sub_post("pathogens", "/pathogens/", {
+    "name": "TB",
+    "category": "Bacterial",
+    "type": "Bacterial",
+    "risk_level": "high"
+})
+pathogen_id = pathogen_res.json().get("pathogen_id") if pathogen_res and pathogen_res.ok else None
+print(f">>> pathogen_id: {pathogen_id}")
 
-print("\n🎉 Seeding completed successfully! Database is populated.")
+if not pathogen_id:
+    print("❌ Cannot continue — pathogen_id is None.")
+    exit()
+
+# 4. Audits
+sub_post("audits", "/audits/", {
+    "ward_id": ward_id,
+    "garbage_removed": True,
+    "toilet_hygiene_status": True,
+    "lighting_adequate": True,
+    "hand_hygiene_score": 85.5,
+    "ppe_score": 90.0,
+    "waste_segregation_score": 80.0,
+    "environmental_score": 88.0,
+    "overall_compliance_score": 87.75,
+    "icno_notes": "Seed record"
+})
+
+# 5. Lab Results — match EXACTLY what LabResultCreate model expects
+sub_post("lab-results", "/lab-results/", {
+    "ward_id": ward_id,
+    "pathogen_id": pathogen_id,
+    "pathogen_name": "TB",                          # ✅ required, denormalized
+    "specimen_type": "sputum",                      # ✅ lowercase enum
+    "result_date": datetime.now().isoformat(),       # ✅ full ISO datetime, not just date
+    "colony_count": 10,                             # ✅ needed for ML Z-score
+    "resistance_profile": [],                       # ✅ optional but explicit
+    "antibiotic_sensitivity": {},                   # ✅ optional but explicit
+    "patient_ward_location": "ICU-Bed-1",           # ✅ optional ward/bed ref
+    "notes": "Seed record"
+})
+
+# 6. Notices
+sub_post("notices", "/notices/", {
+    "title": "Safety Update",
+    "body": "Please ensure full PPE compliance.",
+    "target_role": "Doctor"
+})
+
+print("=" * 50)
+print("🎉 All done!")
