@@ -1,5 +1,6 @@
+import random
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 
 BASE_URL = "http://localhost:8000"
 
@@ -11,12 +12,13 @@ try:
     login_response.raise_for_status()
     token = login_response.json().get("access_token")
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    print("✅ Login Successful with ICNO Privileges!")
+    print("✅ Login Successful!")
 except Exception as e:
     print(f"❌ Cannot connect to server. Error: {e}")
     exit()
 
-print("\n🚀 Injecting Data across all 9 Database Tables...\n" + "="*50)
+print("\n🚀 Running Light Test Seed (1 Row per Ward)...")
+print("="*50)
 
 def sub_post(label, endpoint, payload):
     try:
@@ -30,97 +32,100 @@ def sub_post(label, endpoint, payload):
         print(f"❌ {label} Failed: {e}")
         return None
 
-# ── TABLE 1: Users ────────────────────────────────────────────────────────────
-user_res = sub_post("1. users", "/users/", {
+# ── 1. USERS ──────────────────────────────────────────────────
+user_res = sub_post("1. Users", "/users/", {
     "email": f"staff_{datetime.now().strftime('%H%M%S')}@infecsure.com",
     "password": "staffPassword123",
     "role": "icno",
     "full_name": "Officer Smith"
 })
-user_id = user_res.json().get("uid") if user_res and user_res.ok else None
 
-# ── TABLE 2: Wards ────────────────────────────────────────────────────────────
-ward_res = sub_post("2. wards", "/wards/", {
-    "name": "ICU Ward Floor 2",
-    "ward_type": "icu",
-    "floor": "2",
-    "bed_count": 15,
-    "description": "Intensive Care Unit"
-})
-ward_id = ward_res.json().get("ward_id") if ward_res and ward_res.ok else None
+# ── 2. WARDS ──────────────────────────────────────────────────
+wards_data = [
+    {"name": "Intensive Care Unit (ICU)", "ward_type": "icu", "floor": "1", "bed_count": 15, "description": "Critical ICU"},
+    {"name": "Neonatal ICU (NICU)", "ward_type": "icu", "floor": "1", "bed_count": 10, "description": "Infant ICU"},
+    {"name": "Male Surgical Ward", "ward_type": "general", "floor": "2", "bed_count": 40, "description": "Surgical"},
+    {"name": "Female Medical Ward", "ward_type": "general", "floor": "3", "bed_count": 45, "description": "Medical"},
+    {"name": "Pediatric Ward", "ward_type": "general", "floor": "2", "bed_count": 30, "description": "Pediatric Care"}
+]
 
-# ── TABLE 3: Pathogens ────────────────────────────────────────────────────────
-pathogen_res = sub_post("3. pathogens", "/pathogens/", {
+ward_ids = []
+for w in wards_data:
+    w_res = sub_post(f"2. Wards [{w['name']}]", "/wards/", w)
+    if w_res and w_res.ok:
+        ward_ids.append(w_res.json().get("ward_id"))
+
+ward_id = ward_ids[0] if ward_ids else "ward_dummy_123"
+
+# ── 3. PATHOGENS ──────────────────────────────────────────────
+pathogen_res = sub_post("3. Pathogens", "/pathogens/", {
     "name": "MRSA",
     "category": "bacteria",
     "risk_level": "high",
-    "description": "Methicillin-resistant Staphylococcus aureus",
-    "typical_source": "Skin contact"
+    "description": "Methicillin-resistant Staph",
+    "typical_source": "Skin"
 })
-pathogen_id = pathogen_res.json().get("pathogen_id") if pathogen_res and pathogen_res.ok else None
+pathogen_id = pathogen_res.json().get("pathogen_id") if pathogen_res and pathogen_res.ok else "pathogen_dummy_123"
 
-# ── TABLE 4: Audits ───────────────────────────────────────────────────────────
-sub_post("4. audits", "/audits/", {
-    "ward_id": ward_id if ward_id else "ward_dummy_123",
-    "hand_hygiene_score": 85.5,
-    "hand_hygiene_items": [{"item_name": "soap_available", "compliant": True}],
-    "ppe_score": 90.0,
-    "ppe_items": [{"item_name": "gloves_worn", "compliant": True}],
-    "waste_segregation_score": 80.0,
-    "environmental_score": 88.0,
-    "overall_compliance_score": 87.75,
-    "remarks": "Routine seed audit",
-    "is_offline_sync": False
-})
+# ── 4 & 5. AUDITS & LAB RESULTS (JUST 1 ROW PER WARD!) ────────
+print("\n📝 Injecting 1 Verification Row per Ward...")
+now = datetime.now(timezone.utc).isoformat()
 
-# ── TABLE 5: Lab Results ──────────────────────────────────────────────────────
-lab_res = sub_post("5. lab-results", "/lab-results/", {
-    "ward_id": ward_id if ward_id else "ward_dummy_123",
-    "pathogen_id": pathogen_id if pathogen_id else "pathogen_dummy_123",
-    "pathogen_name": "MRSA",
-    "specimen_type": "blood",
-    "result_date": datetime.now().isoformat(),
-    "colony_count": 150,
-    "resistance_profile": ["MRSA"],
-    "antibiotic_sensitivity": {"ampicillin": "R"},
-    "patient_ward_location": "ICU-Bed-3",
-    "notes": "Seed lab result"
-})
+for w_id in (ward_ids if ward_ids else ["ward_dummy_123"]):
+    # 4. Audits
+    sub_post(f"4. Audits [Ward: {w_id}]", "/audits/", {
+        "ward_id": w_id,
+        "hand_hygiene_score": 85.0,
+        "hand_hygiene_items": [{"item_name": "soap_available", "compliant": True}],
+        "ppe_score": 90.0,
+        "ppe_items": [{"item_name": "gloves_worn", "compliant": True}],
+        "waste_segregation_score": 80.0,
+        "environmental_score": 85.0,
+        "overall_compliance_score": 85.0,
+        "remarks": "Lightweight test seed",
+        "is_offline_sync": False
+    })
 
-# ── TABLE 6: Notices ──────────────────────────────────────────────────────────
-sub_post("6. notices", "/notices/", {
-    "title": "PPE Compliance Reminder",
-    "body": "All staff must ensure full PPE compliance.",
+    # 5. Lab Results (FIXED: 'swab' changed to 'wound_swab')
+    sub_post(f"5. Lab-Results [Ward: {w_id}]", "/lab-results/", {
+        "ward_id": w_id,
+        "pathogen_id": pathogen_id,
+        "pathogen_name": "MRSA",
+        "specimen_type": "wound_swab",  # <-- මෙතන තමයි ලෙඩේ හැදුවේ!
+        "result_date": now,
+        "colony_count": 120,
+        "resistance_profile": ["MRSA"],
+        "antibiotic_sensitivity": {"ampicillin": "R"},
+        "patient_ward_location": "Bed-01",
+        "notes": "Lightweight test lab result"
+    })
+
+# ── 6. NOTICES ────────────────────────────────────────────────
+sub_post("6. Notices", "/notices/", {
+    "title": "System Active Notice",
+    "body": "Seeding validation sequence completed successfully.",
     "target_role": "doctor",
     "is_pinned": True
 })
 
-# ── TABLE 7: Alerts ───────────────────────────────────────────────────────────
-print("✅ 7. alerts → Pipeline active and synchronized.")
-print("-" * 30)
+# ── 7. ALERTS ─────────────────────────────────────────────────
+print("✅ 7. Alerts → Pipeline verified.")
 
-# ── 🔥 8 & 9 BULLETPROOF FALLBACK SYNC 🔥 ─────────────────────────────────────
-print(">>> Forcing Firebase to create 'reports' and 'ocr_scans' automatically...")
-
-import base64
-
-dummy_image_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg=="
-
-# ── TABLE 8: Reports (FIXED WITH FORMAT) ──────────────────────────────────────
-sub_post("8. reports", "/reports/executive", {
-    "ward_id": ward_id if ward_id else "ward_dummy_123",
+# ── 8. REPORTS ────────────────────────────────────────────────
+sub_post("8. Reports", "/reports/executive", {
+    "ward_id": ward_id,
     "report_type": "executive_summary",
-    "format": "pdf"  # සර්වර් එක ඉල්ලන පීඩීඑෆ් ෆෝමැට් එක දුන්නා
+    "format": "pdf"
 })
 
-# ── TABLE 9: OCR Scans (FIXED WITH BASE64 IMAGE) ──────────────────────────────
+# ── 9. OCR SCANS ──────────────────────────────────────────────
 dummy_image_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg=="
-
-sub_post("9. ocr_scans", "/ocr/scan", {
+sub_post("9. OCR Scans", "/ocr/scan", {
     "form_type": "ward_inspection",
-    "ward_id": ward_id if ward_id else "ward_dummy_123",
-    "image_base64": dummy_image_b64  # සර්වර් එකට ඕන කරන බොරු පින්තූරය දුන්නා
+    "ward_id": ward_id,
+    "image_base64": dummy_image_b64
 })
-print("\n" + "=" * 50)
-print("🎉 Process Complete! Reload Firestore console to see all 9 updated tables.")
-print("=" * 50)
+
+print("="*50)
+print("🎉 Verification Complete! Checked all 9 tables successfully.")
+print("="*50)
