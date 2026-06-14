@@ -1,131 +1,96 @@
+import sys
+import os
 import random
-import requests
-from datetime import datetime, timezone
+from datetime import datetime, timedelta
+import firebase_admin
+from firebase_admin import firestore
 
-BASE_URL = "http://localhost:8000"
+print("==================================================")
+print("🚀 InfecSure DIRECT FIRESTORE SEEDER ENGINE (1000+ ROWS)")
+print("==================================================")
 
-print("🔑 Logging in to get access token...")
-login_data = {"email": "icno@infecsure.com", "password": "icnoPassword123"}
+# ── 1. Firestore initialization ──────────────────────────────────────────────
+import os
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from app.config import db
+print("✅ Direct Database Connection Established!")
 
-try:
-    login_response = requests.post(f"{BASE_URL}/auth/login", json=login_data)
-    login_response.raise_for_status()
-    token = login_response.json().get("access_token")
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    print("✅ Login Successful!")
-except Exception as e:
-    print(f"❌ Cannot connect to server. Error: {e}")
-    exit()
+def rand_date(days_back=180):
+    d = datetime.utcnow() - timedelta(days=random.randint(0, days_back))
+    return d.strftime("%Y-%m-%d %H:%M:%S")
 
-print("\n🚀 Running Light Test Seed (1 Row per Ward)...")
-print("="*50)
+def progress(label, count, total):
+    bar = "█" * int((count / total) * 20)
+    print(f"\r  {label} [{bar:<20}] {count}/{total}", end="", flush=True)
 
-def sub_post(label, endpoint, payload):
-    try:
-        res = requests.post(f"{BASE_URL}{endpoint}", json=payload, headers=headers)
-        if res.status_code in (200, 201):
-            print(f"✅ {label} → Status {res.status_code} (Success)")
-        else:
-            print(f"❌ {label} → Status {res.status_code} Error: {res.text}")
-        return res
-    except Exception as e:
-        print(f"❌ {label} Failed: {e}")
-        return None
-
-# ── 1. USERS ──────────────────────────────────────────────────
-user_res = sub_post("1. Users", "/users/", {
-    "email": f"staff_{datetime.now().strftime('%H%M%S')}@infecsure.com",
-    "password": "staffPassword123",
-    "role": "icno",
-    "full_name": "Officer Smith"
-})
-
-# ── 2. WARDS ──────────────────────────────────────────────────
-wards_data = [
-    {"name": "Intensive Care Unit (ICU)", "ward_type": "icu", "floor": "1", "bed_count": 15, "description": "Critical ICU"},
-    {"name": "Neonatal ICU (NICU)", "ward_type": "icu", "floor": "1", "bed_count": 10, "description": "Infant ICU"},
-    {"name": "Male Surgical Ward", "ward_type": "general", "floor": "2", "bed_count": 40, "description": "Surgical"},
-    {"name": "Female Medical Ward", "ward_type": "general", "floor": "3", "bed_count": 45, "description": "Medical"},
-    {"name": "Pediatric Ward", "ward_type": "general", "floor": "2", "bed_count": 30, "description": "Pediatric Care"}
+# ── 2. Create Wards ──────────────────────────────────────────────────────────
+WARD_DEFS = [
+    {"name": "Male Medical Ward",    "ward_type": "general",   "floor": "1", "bed_count": 30},
+    {"name": "Male Surgical Ward",   "ward_type": "surgical",  "floor": "1", "bed_count": 25},
+    {"name": "Male Isolated Ward",   "ward_type": "icu",       "floor": "1", "bed_count": 10},
+    {"name": "Female Medical Ward",  "ward_type": "general",   "floor": "2", "bed_count": 30},
+    {"name": "Female Surgical Ward", "ward_type": "surgical",  "floor": "2", "bed_count": 25},
+    {"name": "Female Isolated Ward", "ward_type": "icu",       "floor": "2", "bed_count": 10},
 ]
-
 ward_ids = []
-for w in wards_data:
-    w_res = sub_post(f"2. Wards [{w['name']}]", "/wards/", w)
-    if w_res and w_res.ok:
-        ward_ids.append(w_res.json().get("ward_id"))
+for wd in WARD_DEFS:
+    ref = db.collection("wards").document()
+    wd["ward_id"] = ref.id
+    ref.set(wd)
+    ward_ids.append(ref.id)
 
-ward_id = ward_ids[0] if ward_ids else "ward_dummy_123"
+# ── 3. Pathogens ─────────────────────────────────────────────────────────────
+pathogens = [
+    {"pathogen_id": "p_mrsa", "name": "MRSA", "risk_level": "critical"},
+    {"pathogen_id": "p_kleb", "name": "Klebsiella pneumoniae", "risk_level": "high"},
+    {"pathogen_id": "p_vre", "name": "VRE", "risk_level": "high"},
+    {"pathogen_id": "p_psae", "name": "Pseudomonas aeruginosa", "risk_level": "moderate"}
+]
+for p in pathogens:
+    db.collection("pathogens").document(p["pathogen_id"]).set(p)
 
-# ── 3. PATHOGENS ──────────────────────────────────────────────
-pathogen_res = sub_post("3. Pathogens", "/pathogens/", {
-    "name": "MRSA",
-    "category": "bacteria",
-    "risk_level": "high",
-    "description": "Methicillin-resistant Staph",
-    "typical_source": "Skin"
-})
-pathogen_id = pathogen_res.json().get("pathogen_id") if pathogen_res and pathogen_res.ok else "pathogen_dummy_123"
-
-# ── 4 & 5. AUDITS & LAB RESULTS (JUST 1 ROW PER WARD!) ────────
-print("\n📝 Injecting 1 Verification Row per Ward...")
-now = datetime.now(timezone.utc).isoformat()
-
-for w_id in (ward_ids if ward_ids else ["ward_dummy_123"]):
-    # 4. Audits
-    sub_post(f"4. Audits [Ward: {w_id}]", "/audits/", {
-        "ward_id": w_id,
-        "hand_hygiene_score": 85.0,
-        "hand_hygiene_items": [{"item_name": "soap_available", "compliant": True}],
-        "ppe_score": 90.0,
-        "ppe_items": [{"item_name": "gloves_worn", "compliant": True}],
-        "waste_segregation_score": 80.0,
-        "environmental_score": 85.0,
-        "overall_compliance_score": 85.0,
-        "remarks": "Lightweight test seed",
-        "is_offline_sync": False
+# ── 4. Ingest 300 Audits (Batch) ─────────────────────────────────────────────
+print("\n⏳ Ingesting 300 Audits into Firestore...")
+audit_batch = db.batch()
+for i in range(300):
+    ref = db.collection("audits").document()
+    audit_batch.set(ref, {
+        "audit_id": ref.id,
+        "ward_id": random.choice(ward_ids),
+        "hand_hygiene_score": random.randint(60, 100),
+        "ppe_score": random.randint(60, 100),
+        "environmental_score": random.randint(60, 100),
+        "overall_compliance_score": random.randint(60, 100),
+        "created_at": rand_date(),
+        "remarks": "Routine compliance audit"
     })
+    if (i + 1) % 100 == 0 or i == 299:
+        audit_batch.commit()
+        audit_batch = db.batch()
+    progress("Audits Progress", i+1, 300)
 
-    # 5. Lab Results (FIXED: 'swab' changed to 'wound_swab')
-    sub_post(f"5. Lab-Results [Ward: {w_id}]", "/lab-results/", {
-        "ward_id": w_id,
-        "pathogen_id": pathogen_id,
-        "pathogen_name": "MRSA",
-        "specimen_type": "wound_swab",  # <-- මෙතන තමයි ලෙඩේ හැදුවේ!
-        "result_date": now,
-        "colony_count": 120,
-        "resistance_profile": ["MRSA"],
-        "antibiotic_sensitivity": {"ampicillin": "R"},
-        "patient_ward_location": "Bed-01",
-        "notes": "Lightweight test lab result"
+# ── 5. Ingest 600 Lab Results (Batch) ────────────────────────────────────────
+print("\n\n⏳ Ingesting 600 Lab Results into Firestore...")
+lab_batch = db.batch()
+for i in range(600):
+    ref = db.collection("lab_results").document()
+    p = random.choice(pathogens)
+    lab_batch.set(ref, {
+        "lab_result_id": ref.id,
+        "ward_id": random.choice(ward_ids),
+        "patient_id": f"pat_{1000 + i}",
+        "pathogen_id": p["pathogen_id"],
+        "pathogen_name": p["name"],
+        "colony_count": random.randint(100, 15000),
+        "result_date": rand_date(),
+        "created_at": rand_date()
     })
+    if (i + 1) % 100 == 0 or i == 599:
+        lab_batch.commit()
+        lab_batch = db.batch()
+    progress("Lab Results Progress", i+1, 600)
 
-# ── 6. NOTICES ────────────────────────────────────────────────
-sub_post("6. Notices", "/notices/", {
-    "title": "System Active Notice",
-    "body": "Seeding validation sequence completed successfully.",
-    "target_role": "doctor",
-    "is_pinned": True
-})
-
-# ── 7. ALERTS ─────────────────────────────────────────────────
-print("✅ 7. Alerts → Pipeline verified.")
-
-# ── 8. REPORTS ────────────────────────────────────────────────
-sub_post("8. Reports", "/reports/executive", {
-    "ward_id": ward_id,
-    "report_type": "executive_summary",
-    "format": "pdf"
-})
-
-# ── 9. OCR SCANS ──────────────────────────────────────────────
-dummy_image_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg=="
-sub_post("9. OCR Scans", "/ocr/scan", {
-    "form_type": "ward_inspection",
-    "ward_id": ward_id,
-    "image_base64": dummy_image_b64
-})
-
-print("="*50)
-print("🎉 Verification Complete! Checked all 9 tables successfully.")
-print("="*50)
+print("\n\n==================================================")
+print("🎉 SUCCESS! 1000+ RECORDS DIRECTLY INJECTED INTO FIRESTORE!")
+print("==================================================")

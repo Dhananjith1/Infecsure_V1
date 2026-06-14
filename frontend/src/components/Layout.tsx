@@ -1,8 +1,8 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth, type UserRole } from '../contexts/AuthContext';
-import { 
-  Activity, LayoutDashboard, ShieldCheck, MapPin, 
-  Droplets, Microscope, FileCheck, LogOut, Clock, ScanLine 
+import {
+  Activity, LayoutDashboard, ShieldCheck, MapPin,
+  Droplets, Microscope, FileCheck, LogOut, Clock, ScanLine
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useState } from 'react';
@@ -12,8 +12,11 @@ export const Layout = () => {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const getNavLinks = (role?: UserRole) => {
-    switch (role) {
+  const getNavLinks = (role?: string) => {
+    // FIXED: Convert role to uppercase to make it completely case-insensitive
+    const cleanRole = role ? role.toString().toUpperCase().trim() : '';
+
+    switch (cleanRole) {
       case 'ICNO':
         return [
           { name: 'Dashboard', path: '/icno/dashboard', icon: LayoutDashboard },
@@ -22,16 +25,17 @@ export const Layout = () => {
           { name: 'Hospital Map', path: '/heatmap', icon: MapPin },
           { name: 'OCR Scan', path: '/icno/ocr', icon: ScanLine },
         ];
-      case 'Sister':
+      case 'SISTER':
+      case 'MATRON':
         return [
           { name: 'Executive Dashboard', path: '/sister/dashboard', icon: LayoutDashboard },
           { name: 'Hospital Map', path: '/heatmap', icon: MapPin },
         ];
-      case 'Lab':
+      case 'LAB':
         return [
           { name: 'Enter Lab Result', path: '/lab/entry', icon: Microscope },
         ];
-      case 'Doctor':
+      case 'DOCTOR':
         return [
           { name: 'Validated Reports', path: '/doctor/inbox', icon: FileCheck },
         ];
@@ -41,7 +45,7 @@ export const Layout = () => {
   };
 
   const navLinks = getNavLinks(user?.role);
-  
+
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -60,7 +64,7 @@ export const Layout = () => {
             <Activity className="text-white" size={28} />
             <h1 className="text-xl font-bold border-b-2 border-transparent">InfecSure</h1>
           </div>
-          <button 
+          <button
             className="md:hidden p-2 bg-brand-dark rounded min-h-[48px] min-w-[48px]"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
@@ -101,7 +105,7 @@ export const Layout = () => {
               <p className="text-sm font-medium text-slate-200 truncate">{user?.name}</p>
               <p className="text-xs text-brand-light">{user?.role}</p>
             </div>
-            
+
             <div className={clsx(
               "flex items-center gap-2 px-3 mb-4",
               sessionTimeout < 120 ? "text-risk-amber animate-pulse" : "text-slate-300"
@@ -128,21 +132,21 @@ export const Layout = () => {
         </div>
       </main>
 
-      {/* Expiry Warning Modal (shows at 2 minutes left) */}
+      {/* Expiry Warning Modal */}
       {sessionTimeout > 0 && sessionTimeout <= 120 && (
         <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full">
             <h3 className="text-lg font-bold text-slate-800 mb-2">Session Expiring Soon</h3>
             <p className="text-slate-600 mb-6">Your session will expire in {formatTime(sessionTimeout)} for security. Would you like to stay logged in?</p>
             <div className="flex gap-3">
-              <button 
+              <button
                 onClick={logout}
                 className="flex-1 border border-slate-200 text-slate-600 py-3 rounded-lg font-medium hover:bg-slate-50 min-h-[48px]"
               >
                 Log Out
               </button>
-              <button 
-                onClick={() => window.location.reload()} // basic reset hack for mock
+              <button
+                onClick={() => window.location.reload()}
                 className="flex-1 bg-brand text-white py-3 rounded-lg font-medium hover:bg-brand-light min-h-[48px]"
               >
                 Stay Logged In

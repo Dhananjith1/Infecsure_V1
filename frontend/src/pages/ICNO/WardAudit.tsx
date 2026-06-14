@@ -2,11 +2,15 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Plus, Save, CloudOff, Check } from 'lucide-react';
+import axios from 'axios'; // 👈 API Call එක දාන්න Axios ඉම්පෝට් කරා
 
 export const WardAudit = () => {
-  const [isOffline] = useState(true);
-  const [pendingSync, setPendingSync] = useState(3);
+  // ─── FIXED: Offline mode එක false කරා ඔන්ලයින් වෙන්න ───
+  const [isOffline] = useState(false);
+  const [pendingSync, setPendingSync] = useState(0);
   const [auditStarted, setAuditStarted] = useState(false);
+  const [loading, setLoading] = useState(false); // 👈 Loading ස්ටේට් එකක් දැම්මා
+
   const [formData, setFormData] = useState<{
     wardId: string;
     handHygiene: Record<string, boolean | string>;
@@ -42,11 +46,29 @@ export const WardAudit = () => {
     }));
   };
 
-  const handleSave = () => {
-    if (isOffline) {
-      setPendingSync(prev => prev + 1);
+  // ─── FIXED: දැන් සිරාවටම බැකෙන්ඩ් එකට ඩේටා සේව් වෙනවා ───
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      // ඔයාගේ FastAPI බැකෙන්ඩ් එකේ Audits ඇන්ඩ්පොයින්ට් එකට ඩේටා යැවීම
+      const response = await axios.post('http://localhost:8000/audits', {
+        ward_id: formData.wardId,
+        hand_hygiene: formData.handHygiene,
+        ppe_availability: formData.ppe,
+        waste_segregation: formData.waste,
+        status: 'approved' // කෙලින්ම approved දැම්මා ඩෑෂ්බෝඩ් එකේ චාර්ට්ස් පිරෙන්න
+      });
+
+      if (response.status === 200 || response.status === 201) {
+        alert('🎯 Ward Audit Saved & Synced Successfully!');
+        setAuditStarted(false);
+      }
+    } catch (error) {
+      console.error('Error saving audit:', error);
+      alert('❌ Failed to sync with backend. Check if FastAPI server is running.');
+    } finally {
+      setLoading(false);
     }
-    setAuditStarted(false);
   };
 
   return (
@@ -55,7 +77,7 @@ export const WardAudit = () => {
       {isOffline && (
         <div className="bg-slate-800 text-white px-4 py-3 rounded-lg flex items-center justify-between text-sm shadow-sm sticky top-4 z-10">
           <div className="flex items-center gap-3">
-            <CloudOff size={20} className="text-risk-amber" /> 
+            <CloudOff size={20} className="text-risk-amber" />
             <span className="font-medium">Offline Mode</span>
           </div>
           <span className="bg-slate-700 px-3 py-1 rounded-full text-xs font-bold">
@@ -71,7 +93,7 @@ export const WardAudit = () => {
         </div>
         {!auditStarted && (
           <Button onClick={() => setAuditStarted(true)} size="lg" className="hidden sm:flex">
-            <Plus size={20} className="mr-2"/> New Audit
+            <Plus size={20} className="mr-2" /> New Audit
           </Button>
         )}
       </header>
@@ -83,54 +105,58 @@ export const WardAudit = () => {
               <Check size={40} className="text-slate-400" />
             </div>
             <h3 className="text-xl font-semibold text-slate-700 mb-2">Ready to inspect</h3>
-            <p className="text-slate-500 mb-8 max-w-md">Begin a new ward audit. Your progress will be saved locally and synced automatically when back online.</p>
+            <p className="text-slate-500 mb-8 max-w-md">Begin a new ward audit. Your progress will be saved directly to the live cloud database.</p>
             <Button onClick={() => setAuditStarted(true)} size="lg" className="w-full sm:w-auto">
-              <Plus size={20} className="mr-2"/> Start New Audit
+              <Plus size={20} className="mr-2" /> Start New Audit
             </Button>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          {/* Ward Selection (Mock) */}
+          {/* Ward Selection */}
           <Card>
             <CardContent className="p-4 md:p-6">
               <label className="block text-sm font-medium text-slate-700 mb-2">Select Ward</label>
-              <select className="w-full border-slate-300 rounded-lg p-4 text-lg bg-slate-50 min-h-[56px] focus:ring-brand focus:border-brand">
-                <option>Ward 04 (General Medicine)</option>
-                <option>Ward 05 (Maternity)</option>
-                <option>ICU</option>
+              <select
+                value={formData.wardId}
+                onChange={(e) => setFormData(prev => ({ ...prev, wardId: e.target.value }))}
+                className="w-full border-slate-300 rounded-lg p-4 text-lg bg-slate-50 min-h-[56px] focus:ring-brand focus:border-brand"
+              >
+                <option value="Ward 04">Ward 04 (General Medicine)</option>
+                <option value="Ward 05">Ward 05 (Maternity)</option>
+                <option value="ICU">ICU</option>
               </select>
             </CardContent>
           </Card>
 
           {/* Checklist Sections */}
           <div className="space-y-4">
-            <ChecklistSection 
-              title="1. Hand Hygiene Facilities" 
-              data={formData.handHygiene} 
-              category="handHygiene" 
-              onToggle={handleToggle} 
+            <ChecklistSection
+              title="1. Hand Hygiene Facilities"
+              data={formData.handHygiene}
+              category="handHygiene"
+              onToggle={handleToggle}
             />
-            <ChecklistSection 
-              title="2. PPE Availability & Usage" 
-              data={formData.ppe} 
-              category="ppe" 
-              onToggle={handleToggle} 
+            <ChecklistSection
+              title="2. PPE Availability & Usage"
+              data={formData.ppe}
+              category="ppe"
+              onToggle={handleToggle}
             />
-            <ChecklistSection 
-              title="3. Waste Segregation" 
-              data={formData.waste} 
-              category="waste" 
-              onToggle={handleToggle} 
+            <ChecklistSection
+              title="3. Waste Segregation"
+              data={formData.waste}
+              category="waste"
+              onToggle={handleToggle}
             />
           </div>
 
           <div className="flex gap-4 pt-4">
-            <Button variant="outline" size="lg" className="flex-1" onClick={() => setAuditStarted(false)}>
+            <Button variant="outline" size="lg" className="flex-1" onClick={() => setAuditStarted(false)} disabled={loading}>
               Cancel
             </Button>
-            <Button size="lg" className="flex-1 bg-risk-green hover:bg-green-700 text-white" onClick={handleSave}>
-              <Save size={20} className="mr-2"/> Save Audit
+            <Button size="lg" className="flex-1 bg-risk-green hover:bg-green-700 text-white" onClick={handleSave} disabled={loading}>
+              <Save size={20} className="mr-2" /> {loading ? 'Saving...' : 'Save Audit'}
             </Button>
           </div>
         </div>
@@ -155,9 +181,9 @@ const ChecklistSection = ({ title, data, category, onToggle }: any) => (
                   {key.replace(/([A-Z])/g, ' $1').trim()}
                 </span>
                 <div className="relative inline-flex items-center cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    className="sr-only peer" 
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
                     checked={value as boolean}
                     onChange={() => onToggle(category, key)}
                   />

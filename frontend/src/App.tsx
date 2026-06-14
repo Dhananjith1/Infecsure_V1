@@ -12,14 +12,23 @@ import { DoctorInbox } from './pages/Doctor/Inbox';
 import { PublicNotice } from './pages/Public/NoticePanel';
 import { Layout } from './components/Layout';
 
-// Protect routes based on roles
+// Protect routes based on roles (FIXED: Case-insensitive check)
 const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: string[] }) => {
   const { user, isAuthenticated, loading } = useAuth();
-  
+
   if (loading) return <div className="p-8 text-center">Loading session...</div>;
   if (!isAuthenticated || !user) return <Navigate to="/login" replace />;
-  if (allowedRoles && !allowedRoles.includes(user.role)) return <Navigate to="/unauthorized" replace />;
-  
+
+  if (allowedRoles) {
+    // Convert everything to uppercase to prevent case mismatch bugs
+    const userRoleUpper = user.role.toString().toUpperCase().trim();
+    const allowedUpper = allowedRoles.map(r => r.toUpperCase().trim());
+
+    if (!allowedUpper.includes(userRoleUpper)) {
+      return <Navigate to="/unauthorized" replace />;
+    }
+  }
+
   return <>{children}</>;
 };
 
@@ -29,7 +38,7 @@ function AppRoutes() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/public" element={<PublicNotice />} />
-        
+
         {/* All authenticated routes wrapped in Layout */}
         <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           {/* ICNO routes */}
@@ -53,7 +62,7 @@ function AppRoutes() {
               <OCRScan />
             </ProtectedRoute>
           } />
-          
+
           {/* Heatmap (Shared among staff) */}
           <Route path="/heatmap" element={<HeatmapView />} />
 

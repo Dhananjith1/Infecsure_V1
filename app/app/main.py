@@ -73,11 +73,16 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ─── CORS ─────────────────────────────────────────────────────────────────────
+# ─── CORS (FIXED: Resolved Credentials vs Wildcard Conflict) ──────────────────
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=[
+        "http://localhost:5173", 
+        "http://127.0.0.1:5173",
+        "http://localhost:5174", 
+        "http://127.0.0.1:5174",
+    ], # 👈 Credentials True නිසා "*" අයින් කරලා origins ටික හරියටම ලිස්ට් කරා!
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
