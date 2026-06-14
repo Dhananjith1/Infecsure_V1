@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand: #0F4C5C;
+  --color-brand-light: #1A6B7C;
+  --color-brand-dark: #0f52ba;
+  --color-risk-green: #16A34A;
+  --color-risk-amber: #F59E0B;
+  --color-risk-red: #DC2626;
+  --color-risk-pending: #6366F1;
+}
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900;
+  }
+}
+
