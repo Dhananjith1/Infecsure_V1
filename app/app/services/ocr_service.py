@@ -12,65 +12,70 @@ Pipeline:
 from __future__ import annotations
 
 import base64
+import gc
 import logging
 import re
 from typing import Any
-
-import numpy as np
-
-# OpenCV and EasyOCR wrapped for graceful degradation
-try:
-    import cv2
-    CV2_AVAILABLE = True
-except ImportError:
-    CV2_AVAILABLE = False
-    logging.warning("OpenCV not available — image preprocessing disabled.")
-
-try:
-    import easyocr
-    _ocr_reader = None  # Lazy init (heavy model load)
-    EASYOCR_AVAILABLE = True
-except ImportError:
-    EASYOCR_AVAILABLE = False
-    logging.warning("EasyOCR not available — OCR features disabled.")
 
 logger = logging.getLogger(__name__)
 
 CONFIDENCE_THRESHOLD = 0.70  # Below this → flagged for review
 
+# Lazy singleton for EasyOCR reader (heavy init ~5s)
+_ocr_reader = None
+
 
 def _get_ocr_reader():
     """Lazy singleton for EasyOCR reader (heavy init ~5s)."""
     global _ocr_reader
-    if _ocr_reader is None and EASYOCR_AVAILABLE:
-        _ocr_reader = easyocr.Reader(["en"], gpu=False, verbose=False)
-    return _ocr_reader
+    if _ocr_reader is None:
+        try:
+            import easyocr  # noqa: PLC0415
+            _ocr_reader = easyocr.Reader(["en"], gpu=False, verbose=False)
+        except ImportError:
+            logging.warning("EasyOCR not available — OCR features disabled.")
+            _ocr_reader = False  # sentinel: attempted but unavailable
+    # Return None if unavailable so callers can check
+    return _ocr_reader if _ocr_reader else None
 
 
 # ─── Image Preprocessing ──────────────────────────────────────────────────────
 
-def _preprocess_image(img_bytes: bytes) -> np.ndarray:
+def _preprocess_image(img_bytes: bytes):
     """
     Apply OpenCV preprocessing to improve OCR accuracy:
     1. Grayscale conversion
     2. Gaussian blur (noise reduction)
     3. Adaptive thresholding (binarization)
     4. Deskew correction
+
+    Returns a preprocessed numpy array (or raw array if cv2 is unavailable).
     """
-    if not CV2_AVAILABLE:
+    import numpy as np  # noqa: PLC0415
+
+    try:
+        import cv2  # noqa: PLC0415
+        cv2_available = True
+    except ImportError:
+        cv2_available = False
+        logging.warning("OpenCV not available — image preprocessing disabled.")
+
+    if not cv2_available:
         # Return raw numpy array without preprocessing
-        arr = np.frombuffer(img_bytes, dtype=np.uint8)
-        return arr
+        return np.frombuffer(img_bytes, dtype=np.uint8)
 
     # Decode to numpy array
     arr = np.frombuffer(img_bytes, dtype=np.uint8)
     img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    del arr  # free raw bytes array early
 
     # 1. Grayscale
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    del img
 
     # 2. Gaussian denoising
     denoised = cv2.GaussianBlur(gray, (3, 3), 0)
+    del gray
 
     # 3. Adaptive threshold (better than global for handwritten docs)
     thresh = cv2.adaptiveThreshold(
@@ -79,8 +84,10 @@ def _preprocess_image(img_bytes: bytes) -> np.ndarray:
         cv2.THRESH_BINARY,
         11, 2
     )
+    del denoised
 
     # 4. Deskew using moments
+    import numpy as np  # already imported above, just reuse  # noqa: F811,PLC0415
     coords = np.column_stack(np.where(thresh < 128))
     if len(coords) > 10:
         angle = cv2.minAreaRect(coords)[-1]
@@ -169,6 +176,8 @@ def process_image(image_base64: str, form_type: str = "general") -> dict[str, An
     5. Extract structured fields
 
     Returns dict matching OCRResult schema.
+    Heavy allocations (img_bytes, processed array) are explicitly deleted
+    and gc.collect() called after OCR to keep idle RAM low.
     """
     # 1. Decode base64
     try:
@@ -210,6 +219,10 @@ def process_image(image_base64: str, form_type: str = "general") -> dict[str, An
         # Fallback: no OCR available
         raw_text = "[OCR ENGINE UNAVAILABLE]"
         tokens = []
+
+    # ── Explicit cleanup of heavy buffers ─────────────────────────────────
+    del img_bytes, processed
+    gc.collect()
 
     low_confidence_count = sum(1 for t in tokens if t["needs_review"])
 

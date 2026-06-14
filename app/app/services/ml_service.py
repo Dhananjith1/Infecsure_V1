@@ -11,27 +11,18 @@ Implements all four core algorithms:
 
 All models are trained on the fly from Firestore historical data using
 Scikit-Learn and MLxtend.  No pre-trained model file is required.
+
+Heavy imports (pandas, sklearn, mlxtend, numpy) are deferred to inside
+the function bodies that need them so they are only loaded on first use.
 """
 
 from __future__ import annotations
 
+import gc
 import logging
 import math
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
-
-import pandas as pd
-
-# ML imports — wrapped in try/except for graceful degradation in test mode
-try:
-    from sklearn.ensemble import RandomForestClassifier
-    from sklearn.preprocessing import LabelEncoder
-    from mlxtend.frequent_patterns import apriori, association_rules
-    from mlxtend.preprocessing import TransactionEncoder
-    ML_AVAILABLE = True
-except ImportError:
-    ML_AVAILABLE = False
-    logging.warning("scikit-learn / mlxtend not installed — ML features degraded.")
 
 from app.services import firebase_service as fs
 
@@ -48,9 +39,10 @@ W1_COMPLIANCE = 0.40   # Audit compliance deficit weight
 W2_PATHOGEN_VIRULENCE = 0.35  # Pathogen risk level weight
 W3_LAB_LOAD = 0.25     # Recent lab result volume weight
 
-# Random Forest
-RF_N_ESTIMATORS = 100
+# Random Forest — kept small to limit training RAM
+RF_N_ESTIMATORS = 50
 RF_RANDOM_STATE = 42
+RF_MAX_DEPTH = 10
 
 # Risk thresholds (0–100 scale)
 RISK_THRESHOLD_LOW = 25.0
@@ -84,6 +76,7 @@ def detect_anomaly(pathogen_id: str, new_count: int) -> dict[str, Any]:
     """
     Compute Z-Score for a new pathogen count against historical distribution.
     Safe version — handles missing numpy, empty history, and Firestore errors.
+    Pure-Python implementation; no heavy imports needed.
     """
     try:
         # Fetch rolling stats from Firestore
@@ -232,10 +225,26 @@ def predict_outbreak_risk(ward_id: str) -> dict[str, Any]:
     """
     Use a Random Forest Classifier trained on all historical ward data
     to predict outbreak risk for a given ward.
+
+    Heavy imports (sklearn, numpy, pandas) are loaded inside this function
+    so they only consume RAM when a prediction is actually requested.
+    After training + prediction the DataFrame and model are explicitly
+    deleted and gc.collect() is called to release memory promptly.
     """
-    if not ML_AVAILABLE:
-        return {"ward_id": ward_id, "risk_score": 0.0, "risk_level": "low",
-                "confidence": 0.0, "alert_created": False, "error": "ML not available"}
+    # ── Lazy imports — only loaded when this endpoint is hit ───────────────
+    try:
+        import numpy as np  # noqa: PLC0415
+        import pandas as pd  # noqa: PLC0415
+        from sklearn.ensemble import RandomForestClassifier  # noqa: PLC0415
+    except ImportError:
+        return {
+            "ward_id": ward_id,
+            "risk_score": 0.0,
+            "risk_level": "low",
+            "confidence": 0.0,
+            "alert_created": False,
+            "error": "ML libraries (sklearn/numpy/pandas) not available",
+        }
 
     # ── Build training dataset from ALL wards ──────────────────────────────
     all_wards = fs.list_wards()
@@ -253,29 +262,48 @@ def predict_outbreak_risk(ward_id: str) -> dict[str, Any]:
 
     df = pd.DataFrame(training_rows)
     feature_cols = [c for c in df.columns if c != "label"]
-    X = df[feature_cols].fillna(0).values
+
+    # Downcast to reduce DataFrame RAM usage
+    for col in feature_cols:
+        if df[col].dtype == "float64":
+            df[col] = df[col].astype("float32")
+        elif df[col].dtype == "int64":
+            df[col] = df[col].astype("int32")
+
+    X = np.array(df[feature_cols].fillna(0).values, dtype=np.float32)
     y = df["label"].values
 
-    # ── Train RF ───────────────────────────────────────────────────────────
+    # ── Train RF (small model: 50 trees, depth 10, single thread) ─────────
     rf = RandomForestClassifier(
         n_estimators=RF_N_ESTIMATORS,
+        max_depth=RF_MAX_DEPTH,
         random_state=RF_RANDOM_STATE,
         class_weight="balanced",
+        n_jobs=1,
     )
     rf.fit(X, y)
 
     # ── Predict for target ward ────────────────────────────────────────────
     target_fv = _build_feature_vector(ward_id)
     if not target_fv:
+        del df, X, y, rf
+        gc.collect()
         return {"ward_id": ward_id, "risk_score": 0.0, "risk_level": "low",
                 "confidence": 0.0, "alert_created": False}
 
-    target_df = pd.DataFrame([{k: target_fv.get(k, 0) for k in feature_cols}])
-    proba = rf.predict_proba(target_df.values)[0]
+    target_row = np.array(
+        [[float(target_fv.get(k, 0)) for k in feature_cols]],
+        dtype=np.float32,
+    )
+    proba = rf.predict_proba(target_row)[0]
     risk_score = float(proba[1]) * 100  # probability of HIGH class → 0-100
 
     importance_dict = dict(zip(feature_cols, rf.feature_importances_.tolist()))
     risk_level = _risk_level_from_score(risk_score)
+
+    # ── Explicit cleanup — release training data and model from RAM ────────
+    del df, X, y, target_row, rf
+    gc.collect()
 
     # ── Update ward in Firestore ───────────────────────────────────────────
     fs.update_ward_risk(
@@ -404,8 +432,17 @@ def find_root_cause_associations(
     min_confidence: float = 0.5,
     min_lift: float = 1.0,
 ) -> list[dict[str, Any]]:
-    if not ML_AVAILABLE:
-        return [{"error": "MLxtend not available"}]
+    """
+    Mine association rules from ward audit and lab data.
+    Heavy imports (mlxtend, pandas) are loaded lazily inside this function.
+    """
+    # ── Lazy imports ───────────────────────────────────────────────────────
+    try:
+        import pandas as pd  # noqa: PLC0415
+        from mlxtend.frequent_patterns import apriori, association_rules  # noqa: PLC0415
+        from mlxtend.preprocessing import TransactionEncoder  # noqa: PLC0415
+    except ImportError:
+        return [{"error": "MLxtend / pandas not available"}]
 
     all_wards = fs.list_wards()
     transactions = []
