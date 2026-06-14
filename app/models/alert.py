@@ -43,6 +43,10 @@ class Alert(AlertCreate):
     validated_at: Optional[datetime] = None
     validated_by_uid: Optional[str] = None
     icno_notes: Optional[str] = None
+    doctor_acknowledged_at: Optional[datetime] = None
+    doctor_acknowledged_by_uid: Optional[str] = None
+    doctor_instructions: Optional[str] = None
+    doctor_follow_up_required: bool = False
 
 
 class ValidateAlertRequest(BaseModel):
@@ -51,3 +55,9 @@ class ValidateAlertRequest(BaseModel):
 
 class RejectAlertRequest(BaseModel):
     icno_notes: Optional[str] = None
+
+
+class DoctorInstructionRequest(BaseModel):
+    acknowledgement_notes: Optional[str] = None
+    management_instructions: str
+    follow_up_required: bool = False

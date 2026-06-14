@@ -70,6 +70,18 @@ def _pathogen_risk_to_numeric(risk_level: str) -> float:
     )
 
 
+def _as_datetime(value: Any) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
+    return None
+
+
 # ─── 1. Z-Score Anomaly Detection (SAFE - NO NUMPY) ───────────────────────────
 
 def detect_anomaly(pathogen_id: str, new_count: int) -> dict[str, Any]:
@@ -189,10 +201,11 @@ def _build_feature_vector(ward_id: str) -> Optional[dict[str, float]]:
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=30)
     lab_results = fs.list_lab_results(ward_id=ward_id, limit=200)
-    recent_results = [
-        r for r in lab_results
-        if r.get("created_at") and r["created_at"] >= cutoff
-    ]
+    recent_results = []
+    for result in lab_results:
+        created_at = _as_datetime(result.get("created_at"))
+        if created_at and created_at >= cutoff:
+            recent_results.append(result)
 
     anomaly_count = sum(
         1 for r in recent_results
@@ -216,7 +229,9 @@ def _build_feature_vector(ward_id: str) -> Optional[dict[str, float]]:
         "anomaly_count": anomaly_count,
         "max_virulence": max_virulence,
         "days_since_last_audit": (
-            (now - audits[-1]["created_at"]).days if audits else 30
+            (now - _as_datetime(audits[-1].get("created_at"))).days
+            if audits and _as_datetime(audits[-1].get("created_at"))
+            else 30
         ),
     }
 
@@ -240,6 +255,7 @@ def predict_outbreak_risk(ward_id: str) -> dict[str, Any]:
         return {
             "ward_id": ward_id,
             "risk_score": 0.0,
+            "risk_score_percent": 0.0,
             "risk_level": "low",
             "confidence": 0.0,
             "alert_created": False,
@@ -288,7 +304,7 @@ def predict_outbreak_risk(ward_id: str) -> dict[str, Any]:
     if not target_fv:
         del df, X, y, rf
         gc.collect()
-        return {"ward_id": ward_id, "risk_score": 0.0, "risk_level": "low",
+        return {"ward_id": ward_id, "risk_score": 0.0, "risk_score_percent": 0.0, "risk_level": "low",
                 "confidence": 0.0, "alert_created": False}
 
     target_row = np.array(
@@ -296,10 +312,11 @@ def predict_outbreak_risk(ward_id: str) -> dict[str, Any]:
         dtype=np.float32,
     )
     proba = rf.predict_proba(target_row)[0]
-    risk_score = float(proba[1]) * 100  # probability of HIGH class → 0-100
+    risk_probability = float(proba[1])
+    risk_score_percent = risk_probability * 100
 
     importance_dict = dict(zip(feature_cols, rf.feature_importances_.tolist()))
-    risk_level = _risk_level_from_score(risk_score)
+    risk_level = _risk_level_from_score(risk_score_percent)
 
     # ── Explicit cleanup — release training data and model from RAM ────────
     del df, X, y, target_row, rf
@@ -308,7 +325,7 @@ def predict_outbreak_risk(ward_id: str) -> dict[str, Any]:
     # ── Update ward in Firestore ───────────────────────────────────────────
     fs.update_ward_risk(
         ward_id,
-        risk_score,
+        risk_probability,
         risk_level,
         target_fv.get("compliance_score", 100.0),
     )
@@ -323,18 +340,23 @@ def predict_outbreak_risk(ward_id: str) -> dict[str, Any]:
             "title": f"Outbreak Risk Alert — {ward.get('name', ward_id)}",
             "description": (
                 f"Random Forest model predicts {risk_level.upper()} outbreak risk "
-                f"(score: {risk_score:.1f}/100) for ward {ward.get('name', ward_id)}. "
+                f"(probability: {risk_probability:.2f}) for ward {ward.get('name', ward_id)}. "
                 f"Immediate ICNO review required."
             ),
             "severity": risk_level,
-            "source_data": {"risk_score": risk_score, "feature_importance": importance_dict},
+            "source_data": {
+                "risk_score": risk_probability,
+                "risk_score_percent": risk_score_percent,
+                "feature_importance": importance_dict,
+            },
             "target_roles": ["icno", "sister", "doctor"],
         })
         alert_created = True
 
     return {
         "ward_id": ward_id,
-        "risk_score": round(risk_score, 2),
+        "risk_score": round(risk_probability, 4),
+        "risk_score_percent": round(risk_score_percent, 2),
         "risk_level": risk_level,
         "confidence": round(float(max(proba)), 3),
         "feature_importance": {k: round(v, 4) for k, v in importance_dict.items()},
@@ -346,12 +368,14 @@ def _heuristic_fallback_risk(ward_id: str) -> dict[str, Any]:
     """Simple compliance-based fallback when RF has insufficient training data."""
     ward = fs.get_ward(ward_id)
     compliance = ward.get("compliance_score", 100.0) if ward else 100.0
-    risk_score = max(0.0, 100.0 - compliance)
-    risk_level = _risk_level_from_score(risk_score)
-    fs.update_ward_risk(ward_id, risk_score, risk_level, compliance)
+    risk_score_percent = max(0.0, 100.0 - compliance)
+    risk_probability = risk_score_percent / 100.0
+    risk_level = _risk_level_from_score(risk_score_percent)
+    fs.update_ward_risk(ward_id, risk_probability, risk_level, compliance)
     return {
         "ward_id": ward_id,
-        "risk_score": round(risk_score, 2),
+        "risk_score": round(risk_probability, 4),
+        "risk_score_percent": round(risk_score_percent, 2),
         "risk_level": risk_level,
         "confidence": 0.5,
         "feature_importance": {},

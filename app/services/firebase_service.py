@@ -8,12 +8,13 @@ All Firestore interactions go through this layer.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from google.cloud.firestore_v1 import DocumentSnapshot
 
 from app.config import db
+from app.models.ward import normalize_ward_name, ward_type_for_name
 
 
 # ─── Generic Helpers ──────────────────────────────────────────────────────────
@@ -104,7 +105,10 @@ def list_users(limit: int = 100) -> list[dict]:
 # ─── Domain: Wards ────────────────────────────────────────────────────────────
 
 def create_ward(data: dict) -> str:
-    ward_id = _new_id()
+    ward_name = normalize_ward_name(str(data["name"]))
+    ward_id = ward_type_for_name(ward_name).value
+    data["name"] = ward_name
+    data["ward_type"] = ward_id
     data["ward_id"] = ward_id
     data["risk_level"] = "low"
     data["risk_score"] = 0.0
@@ -114,6 +118,11 @@ def create_ward(data: dict) -> str:
 
 def get_ward(ward_id: str) -> Optional[dict]:
     return get_document("wards", ward_id)
+
+
+def get_ward_by_name(name: str) -> Optional[dict]:
+    ward_id = ward_type_for_name(normalize_ward_name(name)).value
+    return get_ward(ward_id)
 
 
 def list_wards() -> list[dict]:
@@ -163,6 +172,27 @@ def get_lab_result(result_id: str) -> Optional[dict]:
 def list_lab_results(ward_id: Optional[str] = None, limit: int = 100) -> list[dict]:
     filters = [("ward_id", "==", ward_id)] if ward_id else None
     return list_collection("lab_results", filters=filters, order_by="created_at", limit=limit)
+
+
+def count_positive_cultures_48h(ward_id: str, pathogen_id: Optional[str] = None) -> int:
+    cutoff = _now() - timedelta(hours=48)
+    results = list_lab_results(ward_id=ward_id, limit=500)
+    count = 0
+    for result in results:
+        created_at = result.get("created_at")
+        if isinstance(created_at, str):
+            try:
+                created_at = datetime.fromisoformat(created_at)
+            except ValueError:
+                created_at = None
+        if created_at and created_at < cutoff:
+            continue
+        if pathogen_id and result.get("pathogen_id") != pathogen_id:
+            continue
+        colony_count = result.get("colony_count")
+        if colony_count is None or colony_count > 0:
+            count += 1
+    return count
 
 
 def get_pathogen_history(pathogen_id: str, limit: int = 90) -> list[dict]:
@@ -241,6 +271,43 @@ def reject_alert(alert_id: str, validated_by_uid: str, icno_notes: Optional[str]
         "validated_by_uid": validated_by_uid,
         "icno_notes": icno_notes,
     })
+
+
+def acknowledge_alert_with_instructions(
+    alert_id: str,
+    doctor_uid: str,
+    doctor_name: str,
+    acknowledgement_notes: Optional[str],
+    management_instructions: str,
+    follow_up_required: bool,
+) -> str:
+    instruction_id = _new_id()
+    instruction = {
+        "instruction_id": instruction_id,
+        "alert_id": alert_id,
+        "doctor_uid": doctor_uid,
+        "doctor_name": doctor_name,
+        "acknowledgement_notes": acknowledgement_notes,
+        "management_instructions": management_instructions,
+        "follow_up_required": follow_up_required,
+        "created_at": _now(),
+    }
+    db.collection("management_instructions").document(instruction_id).set(instruction)
+    update_document("alerts", alert_id, {
+        "doctor_acknowledged_at": _now(),
+        "doctor_acknowledged_by_uid": doctor_uid,
+        "doctor_acknowledged_by_name": doctor_name,
+        "doctor_acknowledgement_notes": acknowledgement_notes,
+        "doctor_instructions": management_instructions,
+        "doctor_follow_up_required": follow_up_required,
+        "latest_instruction_id": instruction_id,
+    })
+    return instruction_id
+
+
+def list_management_instructions(alert_id: Optional[str] = None, limit: int = 100) -> list[dict]:
+    filters = [("alert_id", "==", alert_id)] if alert_id else None
+    return list_collection("management_instructions", filters=filters, order_by="created_at", limit=limit)
 
 
 # ─── Domain: OCR Queue ────────────────────────────────────────────────────────

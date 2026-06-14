@@ -2,12 +2,12 @@
 InfecSure — Pydantic Models: Authentication
 """
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
+    email: EmailStr = Field(..., examples=["icno@infecsure.com"])
+    password: str = Field(..., min_length=1, examples=["your-firebase-password"])
 
 
 class TokenResponse(BaseModel):

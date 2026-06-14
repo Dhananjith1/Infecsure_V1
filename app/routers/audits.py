@@ -1,10 +1,5 @@
 """
-InfecSure — Audits Router
-==========================
-POST /audits/                → submit a new ward audit (ICNO only)
-GET  /audits/                → list all audits
-GET  /audits/{audit_id}      → get specific audit
-GET  /audits/priority-list   → AI-generated task priority list (ICNO only)
+InfecSure - Ward Audits Router
 """
 
 from __future__ import annotations
@@ -12,11 +7,10 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.dependencies import get_current_user, require_role
-from app.models.audit import AuditCreate, WardAudit
+from app.models.audit import AuditCreate, AuditSyncRequest
 from app.models.auth import TokenData
 from app.models.user import UserRole
-from app.services import firebase_service as fs
-from app.services import ml_service
+from app.services import audit_service, domain_service, firebase_service as fs, ml_service
 
 router = APIRouter(prefix="/audits", tags=["Ward Audits"])
 
@@ -25,67 +19,24 @@ _ICNO_ONLY = Depends(require_role(UserRole.ICNO))
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED, summary="Submit ward audit (ICNO only)")
-async def create_audit(body: AuditCreate, current_user: TokenData = Depends(require_role(UserRole.ICNO))):
+async def create_audit(
+    body: AuditCreate,
+    current_user: TokenData = Depends(require_role(UserRole.ICNO)),
+):
     """
-    Submit a digital ward audit. Automatically calculates overall compliance score
-    and updates the ward record. Triggers Re-assessment of ward risk.
+    Submit a ward audit, calculate compliance score, update ward risk, and
+    create compliance alerts when needed.
     """
-    ward = fs.get_ward(body.ward_id)
-    if not ward:
-        raise HTTPException(status_code=404, detail="Ward not found.")
-
-    # Compute overall compliance (average of all four scores)
-    scores = [
-        body.hand_hygiene_score,
-        body.ppe_score,
-        body.waste_segregation_score,
-        body.environmental_score,
-    ]
-    overall = sum(scores) / len(scores)
-
-    # Get user display name
-    user_doc = fs.get_user_by_uid(current_user.uid)
-    user_name = user_doc.get("full_name", current_user.email) if user_doc else current_user.email
-
-    data = body.model_dump()
-    # Serialize nested Pydantic objects
-    data["hand_hygiene_items"] = [i.model_dump() for i in body.hand_hygiene_items]
-    data["ppe_items"] = [i.model_dump() for i in body.ppe_items]
-    data["waste_segregation_items"] = [i.model_dump() for i in body.waste_segregation_items]
-    data["environmental_items"] = [i.model_dump() for i in body.environmental_items]
-    data["overall_compliance_score"] = round(overall, 2)
-    data["conducted_by_uid"] = current_user.uid
-    data["conducted_by_name"] = user_name
-
-    audit_id = fs.create_audit(data)
-
-    # Update ward compliance & last audit timestamp
-    from datetime import datetime, timezone
-    fs.update_document("wards", body.ward_id, {
-        "compliance_score": round(overall, 2),
-        "last_audit_at": datetime.now(timezone.utc),
-    })
-
-    # Trigger compliance failure alert if overall < 70%
-    if overall < 70.0:
-        fs.create_alert({
-            "alert_type": "compliance_failure",
-            "ward_id": body.ward_id,
-            "title": f"Compliance Failure — {ward.get('name', body.ward_id)}",
-            "description": (
-                f"Ward compliance dropped to {overall:.1f}% (below 70% threshold). "
-                f"Conducted by {user_name}."
-            ),
-            "severity": "high" if overall < 50 else "medium",
-            "source_data": {"overall_compliance_score": overall},
-            "target_roles": ["icno", "sister"],
-        })
-
-    return {
-        "audit_id": audit_id,
-        "overall_compliance_score": round(overall, 2),
-        "message": "Audit submitted and ward risk updated.",
-    }
+    try:
+        return domain_service.create_audit(
+            body,
+            conducted_by_uid=current_user.uid,
+            conducted_by_email=current_user.email,
+        )
+    except ValueError as exc:
+        message = str(exc)
+        status_code = 404 if "not found" in message.lower() else 400
+        raise HTTPException(status_code=status_code, detail=message)
 
 
 @router.get("/", summary="List all audits")
@@ -94,13 +45,54 @@ async def list_audits(current_user: TokenData = _ALL_AUTH):
     return fs.list_all_audits()
 
 
+@router.post("/sync", status_code=status.HTTP_201_CREATED, summary="Sync offline PWA audit records")
+async def sync_audits(
+    body: AuditSyncRequest,
+    current_user: TokenData = _ICNO_ONLY,
+):
+    """
+    Receive batched audit data captured offline in IndexedDB and commit each
+    valid record through the same audit workflow as manual submissions.
+    """
+    results = []
+    for index, item in enumerate(body.records):
+        try:
+            audit, metrics = audit_service.build_audit_from_sync(item)
+            created = domain_service.create_audit(
+                audit,
+                conducted_by_uid=current_user.uid,
+                conducted_by_email=current_user.email,
+                source="offline_sync",
+                extra_data=metrics,
+            )
+            results.append({
+                "index": index,
+                "offline_record_id": item.offline_record_id,
+                "status": "created",
+                **created,
+                **metrics,
+            })
+        except Exception as exc:
+            results.append({
+                "index": index,
+                "offline_record_id": item.offline_record_id,
+                "status": "failed",
+                "error": str(exc),
+            })
+
+    return {
+        "received": len(body.records),
+        "created": sum(1 for r in results if r["status"] == "created"),
+        "failed": sum(1 for r in results if r["status"] == "failed"),
+        "results": results,
+    }
+
+
 @router.get("/priority-list", summary="AI Task Priority List (ICNO only)")
 async def get_priority_list(_: TokenData = _ICNO_ONLY):
     """
     Returns the ICNO's prioritized daily task list generated by the
-    Risk-Weighted Heuristic Engine:
-    P = (w1 * C) + (w2 * V) + (w3 * L)
-    Sorted by priority score (highest first).
+    Risk-Weighted Heuristic Engine.
     """
     return ml_service.calculate_task_priority()
 

@@ -8,18 +8,31 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator, model_validator
 
 
 class WardType(str, Enum):
-    GENERAL = "general"
-    ICU = "icu"
-    MATERNITY = "maternity"
-    PEDIATRIC = "pediatric"
-    SURGICAL = "surgical"
-    EMERGENCY = "emergency"
-    OUTPATIENT = "outpatient"
-    LABORATORY = "laboratory"
+    MALE = "male_ward"
+    FEMALE = "female_ward"
+
+
+ALLOWED_WARDS: dict[str, WardType] = {
+    "Male Ward": WardType.MALE,
+    "Female Ward": WardType.FEMALE,
+}
+
+
+def normalize_ward_name(name: str) -> str:
+    normalized = " ".join(name.strip().split()).lower()
+    if normalized in {"male ward", "male"}:
+        return "Male Ward"
+    if normalized in {"female ward", "femal ward", "female", "femal"}:
+        return "Female Ward"
+    raise ValueError("This hospital has only two wards: Male Ward and Female Ward.")
+
+
+def ward_type_for_name(name: str) -> WardType:
+    return ALLOWED_WARDS[normalize_ward_name(name)]
 
 
 class RiskLevel(str, Enum):
@@ -31,10 +44,23 @@ class RiskLevel(str, Enum):
 
 class WardCreate(BaseModel):
     name: str
-    ward_type: WardType
+    ward_type: Optional[WardType] = None
     bed_count: int
     floor: Optional[str] = None
     description: Optional[str] = None
+
+    @field_validator("name")
+    @classmethod
+    def validate_ward_name(cls, value: str) -> str:
+        return normalize_ward_name(value)
+
+    @model_validator(mode="after")
+    def align_ward_type(self):
+        expected_type = ward_type_for_name(self.name)
+        if self.ward_type is not None and self.ward_type != expected_type:
+            raise ValueError(f"{self.name} must use ward_type '{expected_type.value}'.")
+        self.ward_type = expected_type
+        return self
 
 
 class Ward(WardCreate):

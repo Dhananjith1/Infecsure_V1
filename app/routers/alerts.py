@@ -15,7 +15,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.dependencies import get_current_user, require_role
-from app.models.alert import Alert, RejectAlertRequest, ValidateAlertRequest
+from app.models.alert import Alert, DoctorInstructionRequest, RejectAlertRequest, ValidateAlertRequest
 from app.models.auth import TokenData
 from app.models.user import UserRole
 from app.services import email_service, firebase_service as fs, ml_service
@@ -25,6 +25,8 @@ router = APIRouter(prefix="/alerts", tags=["Alerts & Validation Gate"])
 _ALL_AUTH = Depends(get_current_user)
 _ICNO_ONLY = Depends(require_role(UserRole.ICNO))
 _ICNO_OR_SISTER = Depends(require_role(UserRole.ICNO, UserRole.SISTER))
+_DOCTOR_ONLY = Depends(require_role(UserRole.DOCTOR))
+_ICNO_SISTER_DOCTOR = Depends(require_role(UserRole.ICNO, UserRole.SISTER, UserRole.DOCTOR))
 
 
 @router.get("/", summary="List alerts")
@@ -66,6 +68,11 @@ async def list_alerts(
     return alerts
 
 
+@router.get("/pending", summary="List pending alerts for ICNO validation")
+async def list_pending_alerts(_: TokenData = _ICNO_ONLY):
+    return fs.list_alerts(status="pending", limit=200)
+
+
 @router.get("/analytics/dashboard", summary="Dashboard summary (ICNO / Sister)")
 async def get_dashboard(_: TokenData = _ICNO_OR_SISTER):
     """Returns aggregate hospital statistics for the ICNO/Matron dashboard."""
@@ -85,6 +92,14 @@ async def get_root_cause(
     Returns sorted association rules with human-readable interpretations.
     """
     return ml_service.find_root_cause_associations(min_support, min_confidence, min_lift)
+
+
+@router.get("/management-instructions", summary="List doctor management instructions")
+async def list_management_instructions(
+    alert_id: str = None,
+    _: TokenData = _ICNO_SISTER_DOCTOR,
+):
+    return fs.list_management_instructions(alert_id=alert_id)
 
 
 @router.get("/{alert_id}", summary="Get specific alert")
@@ -141,6 +156,49 @@ async def reject_alert(
     return {"alert_id": alert_id, "status": "rejected", "message": "Alert rejected."}
 
 
+@router.post("/{alert_id}/doctor-acknowledge", summary="Doctor acknowledges finding and issues instructions")
+@router.post("/{alert_id}/acknowledge", summary="Doctor digitally signs off on an alert")
+@router.post("/{alert_id}/instructions", summary="Doctor appends clinical management instructions")
+async def doctor_acknowledge_alert(
+    alert_id: str,
+    body: DoctorInstructionRequest,
+    current_user: TokenData = _DOCTOR_ONLY,
+):
+    """
+    Supervising Doctor response channel for ICNO-approved clinical findings.
+    Stores acknowledgement and digital management instructions on the alert.
+    """
+    alert = fs.get_alert(alert_id)
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found.")
+    if alert.get("status") not in {"approved", "dispatched"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Doctor can acknowledge only ICNO-approved or dispatched alerts.",
+        )
+    if "doctor" not in alert.get("target_roles", []):
+        raise HTTPException(status_code=403, detail="This alert is not assigned to doctors.")
+
+    user_doc = fs.get_user_by_uid(current_user.uid)
+    doctor_name = user_doc.get("full_name", current_user.email) if user_doc else current_user.email
+
+    instruction_id = fs.acknowledge_alert_with_instructions(
+        alert_id=alert_id,
+        doctor_uid=current_user.uid,
+        doctor_name=doctor_name,
+        acknowledgement_notes=body.acknowledgement_notes,
+        management_instructions=body.management_instructions,
+        follow_up_required=body.follow_up_required,
+    )
+
+    return {
+        "alert_id": alert_id,
+        "instruction_id": instruction_id,
+        "status": "acknowledged",
+        "message": "Clinical finding acknowledged and management instructions saved.",
+    }
+
+
 @router.post("/dispatch/{alert_id}", summary="Dispatch MoH notification email (ICNO only)")
 async def dispatch_alert(alert_id: str, to_email: str, _: TokenData = _ICNO_ONLY):
     """
@@ -158,10 +216,18 @@ async def dispatch_alert(alert_id: str, to_email: str, _: TokenData = _ICNO_ONLY
 
     subject = f"[InfecSure] MoH Notification — {alert.get('title', 'Alert')}"
     body_html = email_service.build_moh_notification_body(alert)
+    if not email_service.smtp_is_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="SMTP credentials are not configured. Set SMTP_USER and SMTP_PASSWORD before dispatching MoH notifications.",
+        )
+
     sent = email_service.send_moh_notification(to_email, subject, body_html)
 
     if sent:
         fs.update_document("alerts", alert_id, {"status": "dispatched"})
         return {"message": f"Notification dispatched to {to_email}.", "status": "dispatched"}
-    else:
-        return {"message": "Email service not configured. Alert not dispatched.", "status": "approved"}
+    raise HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail="Email dispatch failed. Alert remains approved.",
+    )

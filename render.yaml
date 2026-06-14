@@ -4,7 +4,6 @@ services:
     env: python
     region: singapore  # Closest to Colombo, Sri Lanka
     plan: free
-    rootDir: app
     buildCommand: pip install -r requirements.txt
     startCommand: >
       uvicorn app.main:app

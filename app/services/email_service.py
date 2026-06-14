@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
+def smtp_is_configured() -> bool:
+    return bool(settings.smtp_user and settings.smtp_password)
+
+
 def send_moh_notification(
     to_email: str,
     subject: str,
@@ -30,7 +34,7 @@ def send_moh_notification(
     Returns True on success, False on failure.
     Only executes if SMTP credentials are configured.
     """
-    if not settings.smtp_user or not settings.smtp_password:
+    if not smtp_is_configured():
         logger.warning("SMTP credentials not configured. Email not sent.")
         return False
 

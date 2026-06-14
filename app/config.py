@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     # Firebase
     firebase_service_account_path: str = "firebase-service-account.json"
     firebase_project_id: str = "infecsure-5d901"
+    firebase_web_api_key: str = ""
 
     # Email
     smtp_host: str = "smtp.gmail.com"
@@ -51,11 +52,12 @@ def get_settings() -> Settings:
 # ─── Firebase Admin Singleton ────────────────────────────────────────────────
 
 _firebase_app: firebase_admin.App | None = None
+_firebase_init_error: Exception | None = None
 
 
 def _initialize_firebase() -> firebase_admin.App:
     """Initialize Firebase Admin SDK exactly once."""
-    global _firebase_app
+    global _firebase_app, _firebase_init_error
     if _firebase_app is not None:
         return _firebase_app
 
@@ -68,23 +70,65 @@ def _initialize_firebase() -> firebase_admin.App:
         # Fall back to environment variable (for Render deployment)
         sa_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
         if not sa_json:
-            raise RuntimeError(
+            _firebase_init_error = RuntimeError(
                 "Firebase service account not found. "
                 "Set FIREBASE_SERVICE_ACCOUNT_PATH or FIREBASE_SERVICE_ACCOUNT_JSON."
             )
-        cred = credentials.Certificate(json.loads(sa_json))
+            raise _firebase_init_error
+        try:
+            cred = credentials.Certificate(json.loads(sa_json))
+        except Exception as exc:
+            _firebase_init_error = exc
+            raise
 
-    _firebase_app = firebase_admin.initialize_app(
-        cred,
-        {"projectId": settings.firebase_project_id},
-    )
+    try:
+        _firebase_app = firebase_admin.initialize_app(
+            cred,
+            {"projectId": settings.firebase_project_id},
+        )
+        _firebase_init_error = None
+    except Exception as exc:
+        _firebase_init_error = exc
+        raise
     return _firebase_app
 
 
-# Initialize at import time
-_initialize_firebase()
+def firebase_credentials_available() -> bool:
+    """Return True when Firebase can be initialized with configured credentials."""
+    try:
+        _initialize_firebase()
+        return True
+    except Exception:
+        return False
+
+
+def firebase_init_error() -> str | None:
+    """Return the last Firebase initialization error for health diagnostics."""
+    if _firebase_init_error is None:
+        return None
+    return str(_firebase_init_error)
 
 # ─── Clients exposed to the rest of the app ──────────────────────────────────
 
-db: firestore.client = firestore.client()
-auth_client = firebase_auth
+def get_db() -> firestore.Client:
+    _initialize_firebase()
+    return firestore.client()
+
+
+class LazyFirestoreClient:
+    """Proxy that initializes Firebase only when Firestore is first used."""
+
+    def __getattr__(self, name: str):
+        return getattr(get_db(), name)
+
+
+class LazyFirebaseAuthClient:
+    """Proxy that initializes Firebase only when Auth is first used."""
+
+    def __getattr__(self, name: str):
+        _initialize_firebase()
+        return getattr(firebase_auth, name)
+
+
+db = LazyFirestoreClient()
+auth_client = LazyFirebaseAuthClient()
