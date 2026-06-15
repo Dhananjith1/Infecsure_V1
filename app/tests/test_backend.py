@@ -169,6 +169,51 @@ class TestRBAC:
 
 # ─── ML Service Unit Tests ────────────────────────────────────────────────────
 
+class TestHospitalLocations:
+    def test_only_six_hospital_locations_are_allowed(self):
+        from app.models.ward import ALLOWED_HOSPITAL_LOCATIONS, WardCreate
+
+        expected = {
+            "ETU": "etu",
+            "Male Ward": "male_ward",
+            "Female Ward": "female_ward",
+            "OPD": "opd",
+            "Family Medical Clinic": "family_medical_clinic",
+            "Psychiatrist Clinic": "psychiatrist_clinic",
+        }
+        actual = {
+            name: ward_type.value
+            for name, ward_type in ALLOWED_HOSPITAL_LOCATIONS.items()
+        }
+        assert actual == expected
+
+        for name, ward_type in expected.items():
+            location = WardCreate(name=name)
+            assert location.name == name
+            assert location.ward_type == ward_type
+
+    def test_unknown_hospital_location_is_rejected(self):
+        from app.models.ward import WardCreate
+
+        with pytest.raises(Exception):
+            WardCreate(name="ICU", ward_type="icu", bed_count=10)
+
+    def test_firestore_ward_list_filters_unwanted_locations(self):
+        from app.services import firebase_service as fs
+
+        with patch(
+            "app.services.firebase_service.list_collection",
+            return_value=[
+                {"ward_id": "icu", "name": "ICU"},
+                {"ward_id": "etu", "name": "ETU"},
+                {"ward_id": "male_ward", "name": "Male Ward"},
+            ],
+        ):
+            wards = fs.list_wards()
+
+        assert [ward["ward_id"] for ward in wards] == ["etu", "male_ward"]
+
+
 class TestMLService:
     """Unit tests for ML algorithms — mocked Firestore."""
 

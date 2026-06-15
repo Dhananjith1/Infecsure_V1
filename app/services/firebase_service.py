@@ -14,7 +14,7 @@ from typing import Any, Optional
 from google.cloud.firestore_v1 import DocumentSnapshot
 
 from app.config import db
-from app.models.ward import normalize_ward_name, ward_type_for_name
+from app.models.ward import ALLOWED_WARD_IDS, normalize_ward_name, ward_type_for_name
 
 
 # ─── Generic Helpers ──────────────────────────────────────────────────────────
@@ -117,6 +117,8 @@ def create_ward(data: dict) -> str:
 
 
 def get_ward(ward_id: str) -> Optional[dict]:
+    if ward_id not in ALLOWED_WARD_IDS:
+        return None
     return get_document("wards", ward_id)
 
 
@@ -126,10 +128,13 @@ def get_ward_by_name(name: str) -> Optional[dict]:
 
 
 def list_wards() -> list[dict]:
-    return list_collection("wards", order_by="name")
+    wards = list_collection("wards", order_by="name", limit=100)
+    return [ward for ward in wards if ward.get("ward_id") in ALLOWED_WARD_IDS or ward.get("_id") in ALLOWED_WARD_IDS]
 
 
 def update_ward_risk(ward_id: str, risk_score: float, risk_level: str, compliance_score: float) -> None:
+    if ward_id not in ALLOWED_WARD_IDS:
+        return
     update_document("wards", ward_id, {
         "risk_score": risk_score,
         "risk_level": risk_level,

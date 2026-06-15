@@ -12,27 +12,47 @@ from pydantic import BaseModel, field_validator, model_validator
 
 
 class WardType(str, Enum):
+    ETU = "etu"
     MALE = "male_ward"
     FEMALE = "female_ward"
+    OPD = "opd"
+    FAMILY_MEDICAL_CLINIC = "family_medical_clinic"
+    PSYCHIATRIST_CLINIC = "psychiatrist_clinic"
 
 
-ALLOWED_WARDS: dict[str, WardType] = {
+ALLOWED_HOSPITAL_LOCATIONS: dict[str, WardType] = {
+    "ETU": WardType.ETU,
     "Male Ward": WardType.MALE,
     "Female Ward": WardType.FEMALE,
+    "OPD": WardType.OPD,
+    "Family Medical Clinic": WardType.FAMILY_MEDICAL_CLINIC,
+    "Psychiatrist Clinic": WardType.PSYCHIATRIST_CLINIC,
 }
+
+ALLOWED_WARDS = ALLOWED_HOSPITAL_LOCATIONS
+ALLOWED_WARD_IDS = {ward_type.value for ward_type in ALLOWED_HOSPITAL_LOCATIONS.values()}
 
 
 def normalize_ward_name(name: str) -> str:
     normalized = " ".join(name.strip().split()).lower()
+    if normalized in {"etu", "emergency treatment unit"}:
+        return "ETU"
     if normalized in {"male ward", "male"}:
         return "Male Ward"
     if normalized in {"female ward", "femal ward", "female", "femal"}:
         return "Female Ward"
-    raise ValueError("This hospital has only two wards: Male Ward and Female Ward.")
+    if normalized in {"opd", "outpatient department", "out patient department"}:
+        return "OPD"
+    if normalized in {"family medical clinic", "family medicine clinic", "family clinic"}:
+        return "Family Medical Clinic"
+    if normalized in {"psychiatrist clinic", "psychiatry clinic", "psychiatric clinic"}:
+        return "Psychiatrist Clinic"
+    allowed = ", ".join(ALLOWED_HOSPITAL_LOCATIONS)
+    raise ValueError(f"This system covers only these hospital locations: {allowed}.")
 
 
 def ward_type_for_name(name: str) -> WardType:
-    return ALLOWED_WARDS[normalize_ward_name(name)]
+    return ALLOWED_HOSPITAL_LOCATIONS[normalize_ward_name(name)]
 
 
 class RiskLevel(str, Enum):
@@ -45,7 +65,7 @@ class RiskLevel(str, Enum):
 class WardCreate(BaseModel):
     name: str
     ward_type: Optional[WardType] = None
-    bed_count: int
+    bed_count: int = 0
     floor: Optional[str] = None
     description: Optional[str] = None
 
