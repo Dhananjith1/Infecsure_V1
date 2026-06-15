@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
-from app.routers import auth, users, wards, audits, gate, lab, lab_results, pathogens, alerts, ocr, reports, heatmap, notices, public
+from app.routers import auth, users, wards, audits, gate, lab, lab_results, pathogens, alerts, ocr, reports, heatmap, notices, public, prediction
 from app.services.auth_service import seed_default_users
 
 # ─── Logging ─────────────────────────────────────────────────────────────────
@@ -104,6 +104,7 @@ app.include_router(reports.router)
 app.include_router(heatmap.router)
 app.include_router(notices.router)
 app.include_router(public.router)
+app.include_router(prediction.router)
 
 
 # ─── Root Health Check ────────────────────────────────────────────────────────
