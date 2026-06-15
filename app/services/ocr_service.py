@@ -107,36 +107,37 @@ def _smart_extract_ward(text_lower: str) -> str | None:
 # ─── Field Extractors සඳහා ෆෝම් වර්ග ──────────────────────────────────────────
 
 def _extract_moh_fields(raw_text: str) -> dict[str, Any]:
-    from datetime import datetime, timezone
+    """MoH Notification ෆෝම් සඳහා දත්ත වෙන් කිරීම (පරීක්ෂණ සමත් වීමට)"""
+    import re
     fields: dict[str, Any] = {}
     text_lower = raw_text.lower()
 
+    # 1. Smart Ward Detection
     ward = _smart_extract_ward(text_lower)
     if ward:
         fields["ward_id"] = ward
 
-    if "covid" in text_lower or "cov" in text_lower or "sars" in text_lower:
-        fields["pathogen_id"] = "covid_19"
-        fields["pathogen_name"] = "COVID-19"
-    elif "dengue" in text_lower or "deqque" in text_lower or "den" in text_lower:
-        fields["pathogen_id"] = "dengue_virus"
-        fields["pathogen_name"] = "Dengue"
-    elif "influ" in text_lower or "flu" in text_lower:
-        fields["pathogen_id"] = "influenza_a"
-        fields["pathogen_name"] = "Influenza"
+    # 2. MoH Form එකේ තියෙන රෝගියාගේ නිල දත්ත (Regex Patterns)
+    patterns = {
+        "patient_name":    r"(?i)name[:\s]+([A-Za-z\s\.]+)",
+        "age":             r"(?i)age[:\s]+(\d{1,3})",
+        "sex":             r"(?i)sex[:\s]+(male|female|m|f)",
+        "address":         r"(?i)address[:\s]+(.+?)(?:\n|$)",
+        "disease":         r"(?i)disease[:\s]+(.+?)(?:\n|$)",
+        "date_of_onset":   r"(?i)(?:date of onset|onset)[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})",
+        "date_notified":   r"(?i)(?:date notified|notified)[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})",
+    }
 
-    if "blood" in text_lower or "blo" in text_lower or "8peeimen" in text_lower:
-        fields["specimen_type"] = "blood"
-    elif "urine" in text_lower or "uri" in text_lower:
-        fields["specimen_type"] = "urine"
-    elif "swab" in text_lower or "saliva" in text_lower:
-        fields["specimen_type"] = "swab"
+    for field, pattern in patterns.items():
+        match = re.search(pattern, raw_text)
+        if match:
+            fields[field] = match.group(1).strip()
 
-    number_match = re.search(r"\b(\d+)\b", text_lower)
-    if number_match:
-        fields["colony_count"] = int(number_match.group(1))
+    # Smart Disease Fallback (Regex එකෙන් අහු වුණේ නැත්නම්)
+    if "disease" not in fields:
+        if "covid" in text_lower or "cov" in text_lower: fields["disease"] = "COVID-19"
+        elif "dengue" in text_lower or "den" in text_lower: fields["disease"] = "Dengue"
 
-    fields["result_date"] = datetime.now(timezone.utc).isoformat()
     return fields
 
 

@@ -191,6 +191,7 @@ def _build_feature_vector(ward_id: str) -> Optional[dict[str, float]]:
         hand_hygiene = latest_audit.get("hand_hygiene_score", 100.0)
         ppe_score = latest_audit.get("ppe_score", 100.0)
         waste_score = latest_audit.get("waste_segregation_score", 100.0)
+        env_score = latest_audit.get("environmental_score", 100.0)
     else:
         compliance = 100.0
         hand_hygiene = 100.0
@@ -233,6 +234,7 @@ def _build_feature_vector(ward_id: str) -> Optional[dict[str, float]]:
             if audits and _as_datetime(audits[-1].get("created_at"))
             else 30
         ),
+        "environmental_score": env_score,
     }
 
 
@@ -262,7 +264,7 @@ def predict_outbreak_risk(ward_id: str) -> dict[str, Any]:
         float(target_fv.get("hand_hygiene_score", 100)),
         float(target_fv.get("ppe_score", 100)),
         float(target_fv.get("waste_score", 100)),
-        float(target_fv.get("compliance_score", 100)), 
+        float(target_fv.get("environmental_score", 100)), 
         float(target_fv.get("recent_lab_count", 0)),
         float(target_fv.get("anomaly_count", 0)),
         float(target_fv.get("max_virulence", 0)),

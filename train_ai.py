@@ -72,10 +72,10 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_
 
 # Initialize and train the Random Forest Classifier
 model = RandomForestClassifier(n_estimators=100, random_state=42)
-model.fit(X_train, y_train)
+model.fit(X_train.values, y_train)
 
 # Check the accuracy of the AI model
-predictions = model.predict(X_test)
+predictions = model.predict(X_test.values)
 accuracy = accuracy_score(y_test, predictions)
 print(f"✅ Training complete! Model Accuracy: {accuracy * 100:.2f}%\n")
 

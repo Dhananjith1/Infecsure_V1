@@ -42,7 +42,8 @@ class WardPredictionRequest(BaseModel):
 # 2. මෙන්න මෙතන තමයි මැජික් එක! 
 # Depends(get_current_user) දැම්මම Dummy Tokens සේරම එලවලා දානවා. 
 # ඔයාට ඕන නම් මේක Depends(require_role([UserRole.ICNO])) විදියට දීලා ICNO ට විතරක් බලන්න පුළුවන් වෙන්න හදන්නත් පුළුවන්.
-@router.post("/{ward_id}/predict", dependencies=[Depends(get_current_user)])
+#dan icno withrai puluwan
+@router.post("/{ward_id}/predict", dependencies=[Depends(require_role(UserRole.ICNO))])
 async def predict_ward_risk(ward_id: str, data: WardPredictionRequest):
     if ward_id not in ALLOWED_WARDS:
         raise HTTPException(
