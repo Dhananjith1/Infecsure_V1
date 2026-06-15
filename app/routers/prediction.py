@@ -1,14 +1,15 @@
 from fastapi import APIRouter, HTTPException, Depends
-from fastapi.security import HTTPBearer
 from pydantic import BaseModel
 import joblib
 import os
 import numpy as np
 
-router = APIRouter(prefix="/ai-engine", tags=["Outbreak Prediction"])
+# 1. ඔයාගේ සිස්ටම් එකේ නියම Security Imports ටික මෙතනට ගත්තා!
+from app.dependencies import get_current_user, require_role
+from app.models.auth import TokenData
+from app.models.user import UserRole
 
-# Swagger UI එකට මේක Secure Endpoint එකක් කියලා අඳුරගන්න මේක දානවා
-security = HTTPBearer()
+router = APIRouter(prefix="/ai-engine", tags=["Outbreak Prediction"])
 
 # අලුත් රෝහල් ව්‍යුහය (නිල අංශ 6 පමණි)
 ALLOWED_WARDS = [
@@ -38,8 +39,10 @@ class WardPredictionRequest(BaseModel):
     max_virulence: float
     days_since_last_audit: int
 
-# dependencies=[Depends(security)] දැම්මම Swagger එකේ අර ඉබි යතුරු (Padlock) අයිකන් එක වැටෙනවා
-@router.post("/{ward_id}/predict", dependencies=[Depends(security)])
+# 2. මෙන්න මෙතන තමයි මැජික් එක! 
+# Depends(get_current_user) දැම්මම Dummy Tokens සේරම එලවලා දානවා. 
+# ඔයාට ඕන නම් මේක Depends(require_role([UserRole.ICNO])) විදියට දීලා ICNO ට විතරක් බලන්න පුළුවන් වෙන්න හදන්නත් පුළුවන්.
+@router.post("/{ward_id}/predict", dependencies=[Depends(get_current_user)])
 async def predict_ward_risk(ward_id: str, data: WardPredictionRequest):
     if ward_id not in ALLOWED_WARDS:
         raise HTTPException(

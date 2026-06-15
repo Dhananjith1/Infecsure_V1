@@ -238,120 +238,79 @@ def _build_feature_vector(ward_id: str) -> Optional[dict[str, float]]:
 
 def predict_outbreak_risk(ward_id: str) -> dict[str, Any]:
     """
-    Use a Random Forest Classifier trained on all historical ward data
+    Use the pre-trained Random Forest Classifier (ml_models/rf_outbreak_model.pkl)
     to predict outbreak risk for a given ward.
-
-    Heavy imports (sklearn, numpy, pandas) are loaded inside this function
-    so they only consume RAM when a prediction is actually requested.
-    After training + prediction the DataFrame and model are explicitly
-    deleted and gc.collect() is called to release memory promptly.
     """
-    # ── Lazy imports — only loaded when this endpoint is hit ───────────────
+    import joblib
+    import numpy as np
+    
+    # ── 1. Load the pre-trained model ───────────────────────────────────────
     try:
-        import numpy as np  # noqa: PLC0415
-        import pandas as pd  # noqa: PLC0415
-        from sklearn.ensemble import RandomForestClassifier  # noqa: PLC0415
-    except ImportError:
-        return {
-            "ward_id": ward_id,
-            "risk_score": 0.0,
-            "risk_score_percent": 0.0,
-            "risk_level": "low",
-            "confidence": 0.0,
-            "alert_created": False,
-            "error": "ML libraries (sklearn/numpy/pandas) not available",
-        }
-
-    # ── Build training dataset from ALL wards ──────────────────────────────
-    all_wards = fs.list_wards()
-    training_rows = []
-    for w in all_wards:
-        fv = _build_feature_vector(w["ward_id"])
-        if fv:
-            current_risk = w.get("risk_level", "low")
-            fv["label"] = 1 if current_risk in ("high", "critical") else 0
-            training_rows.append(fv)
-
-    if len(training_rows) < 3:
-        # Not enough data — fall back to heuristic
+        rf_model = joblib.load("ml_models/rf_outbreak_model.pkl")
+    except Exception as e:
+        logger.error(f"Failed to load pre-trained RF model: {e}")
         return _heuristic_fallback_risk(ward_id)
 
-    df = pd.DataFrame(training_rows)
-    feature_cols = [c for c in df.columns if c != "label"]
-
-    # Downcast to reduce DataFrame RAM usage
-    for col in feature_cols:
-        if df[col].dtype == "float64":
-            df[col] = df[col].astype("float32")
-        elif df[col].dtype == "int64":
-            df[col] = df[col].astype("int32")
-
-    X = np.array(df[feature_cols].fillna(0).values, dtype=np.float32)
-    y = df["label"].values
-
-    # ── Train RF (small model: 50 trees, depth 10, single thread) ─────────
-    rf = RandomForestClassifier(
-        n_estimators=RF_N_ESTIMATORS,
-        max_depth=RF_MAX_DEPTH,
-        random_state=RF_RANDOM_STATE,
-        class_weight="balanced",
-        n_jobs=1,
-    )
-    rf.fit(X, y)
-
-    # ── Predict for target ward ────────────────────────────────────────────
+    # ── 2. Get current real-time data for the ward ────────────────────────
     target_fv = _build_feature_vector(ward_id)
     if not target_fv:
-        del df, X, y, rf
-        gc.collect()
         return {"ward_id": ward_id, "risk_score": 0.0, "risk_score_percent": 0.0, "risk_level": "low",
                 "confidence": 0.0, "alert_created": False}
 
-    target_row = np.array(
-        [[float(target_fv.get(k, 0)) for k in feature_cols]],
-        dtype=np.float32,
-    )
-    proba = rf.predict_proba(target_row)[0]
+    # ── 3. Prepare data array (must match training feature order exactly) ──
+    target_row = np.array([[
+        float(target_fv.get("hand_hygiene_score", 100)),
+        float(target_fv.get("ppe_score", 100)),
+        float(target_fv.get("waste_score", 100)),
+        float(target_fv.get("compliance_score", 100)), 
+        float(target_fv.get("recent_lab_count", 0)),
+        float(target_fv.get("anomaly_count", 0)),
+        float(target_fv.get("max_virulence", 0)),
+        float(target_fv.get("days_since_last_audit", 30))
+    ]], dtype=np.float32)
+
+    # ── 4. Make Prediction ────────────────────────────────────────────────
+    proba = rf_model.predict_proba(target_row)[0]
     risk_probability = float(proba[1])
     risk_score_percent = risk_probability * 100
-
-    importance_dict = dict(zip(feature_cols, rf.feature_importances_.tolist()))
     risk_level = _risk_level_from_score(risk_score_percent)
 
-    # ── Explicit cleanup — release training data and model from RAM ────────
-    del df, X, y, target_row, rf
-    gc.collect()
+    # ── 5. Update ward in Firestore ───────────────────────────────────────
+    try:
+        fs.update_ward_risk(
+            ward_id,
+            risk_probability,
+            risk_level,
+            target_fv.get("compliance_score", 100.0),
+        )
+    except Exception as e:
+        logger.warning(f"Could not update ward risk in Firestore: {e}")
 
-    # ── Update ward in Firestore ───────────────────────────────────────────
-    fs.update_ward_risk(
-        ward_id,
-        risk_probability,
-        risk_level,
-        target_fv.get("compliance_score", 100.0),
-    )
-
-    # ── Create alert if high/critical ──────────────────────────────────────
+    # ── 6. Create alert if high/critical ──────────────────────────────────
     alert_created = False
     if risk_level in ("high", "critical"):
-        ward = fs.get_ward(ward_id)
-        fs.create_alert({
-            "alert_type": "outbreak_risk",
-            "ward_id": ward_id,
-            "title": f"Outbreak Risk Alert — {ward.get('name', ward_id)}",
-            "description": (
-                f"Random Forest model predicts {risk_level.upper()} outbreak risk "
-                f"(probability: {risk_probability:.2f}) for ward {ward.get('name', ward_id)}. "
-                f"Immediate ICNO review required."
-            ),
-            "severity": risk_level,
-            "source_data": {
-                "risk_score": risk_probability,
-                "risk_score_percent": risk_score_percent,
-                "feature_importance": importance_dict,
-            },
-            "target_roles": ["icno", "sister", "doctor"],
-        })
-        alert_created = True
+        try:
+            ward = fs.get_ward(ward_id)
+            ward_name = ward.get('name', ward_id) if ward else ward_id
+            fs.create_alert({
+                "alert_type": "outbreak_risk",
+                "ward_id": ward_id,
+                "title": f"Outbreak Risk Alert — {ward_name}",
+                "description": (
+                    f"AI Model predicts {risk_level.upper()} outbreak risk "
+                    f"(probability: {risk_score_percent:.1f}%) for {ward_name}. "
+                    f"Immediate ICNO review required."
+                ),
+                "severity": risk_level,
+                "source_data": {
+                    "risk_score": risk_probability,
+                    "risk_score_percent": risk_score_percent,
+                },
+                "target_roles": ["icno", "sister", "doctor"],
+            })
+            alert_created = True
+        except Exception as e:
+            logger.error(f"Failed to create alert: {e}")
 
     return {
         "ward_id": ward_id,
@@ -359,10 +318,9 @@ def predict_outbreak_risk(ward_id: str) -> dict[str, Any]:
         "risk_score_percent": round(risk_score_percent, 2),
         "risk_level": risk_level,
         "confidence": round(float(max(proba)), 3),
-        "feature_importance": {k: round(v, 4) for k, v in importance_dict.items()},
         "alert_created": alert_created,
+        "model_used": "Pre-trained Random Forest (pkl)"
     }
-
 
 def _heuristic_fallback_risk(ward_id: str) -> dict[str, Any]:
     """Simple compliance-based fallback when RF has insufficient training data."""
