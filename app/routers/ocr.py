@@ -14,6 +14,25 @@ from app.models.ocr import FormType, OCRConfirmRequest, OCRScanRequest
 from app.models.user import UserRole
 from app.services import domain_service, firebase_service as fs, ocr_service
 
+import numpy as np
+
+def clean_data_for_firestore(data):
+    if isinstance(data, dict):
+        return {str(k): clean_data_for_firestore(v) for k, v in data.items()}
+    elif isinstance(data, (list, tuple, set)):
+        return [clean_data_for_firestore(i) for i in data]
+    elif isinstance(data, np.ndarray):
+        return clean_data_for_firestore(data.tolist())
+    elif isinstance(data, (np.bool_, bool)):
+        return bool(data)
+    elif isinstance(data, (np.integer, int)):
+        return int(data)
+    elif isinstance(data, (np.floating, float)):
+        return float(data)
+    elif hasattr(data, 'item') and callable(getattr(data, 'item')):
+        return data.item()
+    return data
+
 router = APIRouter(prefix="/ocr", tags=["OCR Pipeline"])
 
 _ICNO_ONLY = Depends(require_role(UserRole.ICNO))
@@ -38,17 +57,23 @@ async def scan_document(body: OCRScanRequest, current_user: TokenData = _ICNO_ON
         "created_by_uid": current_user.uid,
     }
 
+    data = clean_data_for_firestore(data)
     scan_id = fs.create_ocr_record(data)
-    return {
+    
+    
+    final_response = {
         "scan_id": scan_id,
         "form_type": body.form_type.value,
-        "raw_text": ocr_output["raw_text"],
-        "tokens": ocr_output["tokens"],
-        "low_confidence_count": ocr_output["low_confidence_count"],
-        "extracted_fields": ocr_output["extracted_fields"],
+        "raw_text": ocr_output.get("raw_text", ""), 
+        "tokens": ocr_output.get("tokens", []),
+        "low_confidence_count": ocr_output.get("low_confidence_count", 0),
+        "extracted_fields": ocr_output.get("extracted_fields", {}),
         "status": "pending_review",
-        "message": f"OCR complete. {ocr_output['low_confidence_count']} token(s) flagged for review.",
+        "message": f"OCR complete. {ocr_output.get('low_confidence_count', 0)} token(s) flagged for review.",
     }
+    
+    
+    return clean_data_for_firestore(final_response)
 
 
 @router.post("/upload", status_code=status.HTTP_201_CREATED, summary="Upload image for OCR processing")
