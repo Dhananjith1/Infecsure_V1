@@ -49,8 +49,12 @@ user_res = sub_post("1. Users", "/users/", {
 
 # ── 2. WARDS ──────────────────────────────────────────────────
 wards_data = [
+    {"name": "ETU", "ward_type": "etu", "floor": "Ground", "bed_count": 0, "description": "Emergency Treatment Unit"},
     {"name": "Male Ward", "ward_type": "male_ward", "floor": "1", "bed_count": 40, "description": "Male inpatient ward"},
     {"name": "Female Ward", "ward_type": "female_ward", "floor": "1", "bed_count": 40, "description": "Female inpatient ward"},
+    {"name": "OPD", "ward_type": "opd", "floor": "Ground", "bed_count": 0, "description": "Outpatient Department"},
+    {"name": "Family Medical Clinic", "ward_type": "family_medical_clinic", "floor": "Ground", "bed_count": 0, "description": "Family medical clinic"},
+    {"name": "Psychiatrist Clinic", "ward_type": "psychiatrist_clinic", "floor": "Ground", "bed_count": 0, "description": "Psychiatrist clinic"},
 ]
 
 ward_ids = []
