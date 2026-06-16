@@ -77,10 +77,6 @@ export function OCRScan() {
       setVideoReady(false);
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
       setCameraActive(true);
       setCameraStatus("Camera started. If the preview stays black, check browser/site camera permission or try the file picker.");
     } catch (err) {
@@ -96,6 +92,24 @@ export function OCRScan() {
     setVideoReady(false);
     setCameraStatus("");
   }
+
+  useEffect(() => {
+    if (!cameraActive || !streamRef.current || !videoRef.current) return;
+    const video = videoRef.current;
+    video.srcObject = streamRef.current;
+    video
+      .play()
+      .then(() => {
+        if (video.videoWidth && video.videoHeight) {
+          setVideoReady(true);
+          setCameraStatus("Camera preview is ready.");
+        }
+      })
+      .catch((err) => {
+        setVideoReady(false);
+        setCameraStatus(err instanceof Error ? err.message : "The browser could not play the camera preview.");
+      });
+  }, [cameraActive]);
 
   function captureFrame() {
     const video = videoRef.current;

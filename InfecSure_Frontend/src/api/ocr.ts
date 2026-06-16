@@ -1,11 +1,13 @@
 import { api } from "./client";
 
+const OCR_TIMEOUT_MS = 180000;
+
 export async function scanDocument(imageBase64: string, formType: string, referenceId?: string) {
   const { data } = await api.post("/ocr/scan", {
     image_base64: imageBase64,
     form_type: formType,
     reference_id: referenceId || null
-  });
+  }, { timeout: OCR_TIMEOUT_MS });
   return data;
 }
 
@@ -38,7 +40,7 @@ export async function processDocument(imageBase64: string, formType: string, ref
     image_base64: imageBase64,
     form_type: formType,
     reference_id: referenceId || null
-  });
+  }, { timeout: OCR_TIMEOUT_MS });
   return data;
 }
 
@@ -47,6 +49,6 @@ export async function uploadDocument(file: File, formType: string, referenceId?:
   form.append("file", file);
   form.append("form_type", formType);
   if (referenceId) form.append("reference_id", referenceId);
-  const { data } = await api.post("/ocr/upload", form);
+  const { data } = await api.post("/ocr/upload", form, { timeout: OCR_TIMEOUT_MS });
   return data;
 }
