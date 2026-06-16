@@ -97,32 +97,36 @@ export function WardAudit() {
     payload.environmental_score
   ) / 4);
 
+  async function saveAuditOffline(message: string) {
+    await saveOffline({
+      offline_record_id: crypto.randomUUID(),
+      ward_id: wardId,
+      hand_hygiene: { correct: payload.hand_hygiene_items.filter((i) => i.compliant).length, total: payload.hand_hygiene_items.length },
+      ppe_adherence: { correct: payload.ppe_items.filter((i) => i.compliant).length, total: payload.ppe_items.length },
+      waste_segregation: { misplaced_items: payload.waste_segregation_items.filter((i) => !i.compliant).length, total_items: payload.waste_segregation_items.length },
+      environmental_score: payload.environmental_score,
+      hand_hygiene_items: payload.hand_hygiene_items,
+      ppe_items: payload.ppe_items,
+      waste_segregation_items: payload.waste_segregation_items,
+      environmental_items: payload.environmental_items,
+      remarks,
+      captured_at: new Date().toISOString()
+    });
+    showToast({ type: "info", title: "Audit saved offline", message });
+  }
+
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setSubmitting(true);
     try {
       if (!navigator.onLine) {
-        await saveOffline({
-          offline_record_id: crypto.randomUUID(),
-          ward_id: wardId,
-          hand_hygiene: { correct: payload.hand_hygiene_items.filter((i) => i.compliant).length, total: payload.hand_hygiene_items.length },
-          ppe_adherence: { correct: payload.ppe_items.filter((i) => i.compliant).length, total: payload.ppe_items.length },
-          waste_segregation: { misplaced_items: payload.waste_segregation_items.filter((i) => !i.compliant).length, total_items: payload.waste_segregation_items.length },
-          environmental_score: payload.environmental_score,
-          hand_hygiene_items: payload.hand_hygiene_items,
-          ppe_items: payload.ppe_items,
-          waste_segregation_items: payload.waste_segregation_items,
-          environmental_items: payload.environmental_items,
-          remarks,
-          captured_at: new Date().toISOString()
-        });
-        showToast({ type: "info", title: "Audit saved offline", message: "It will sync when the connection returns." });
+        await saveAuditOffline("No network detected. It will sync when the connection returns.");
       } else {
         await createAudit(payload);
         showToast({ type: "success", title: "Audit submitted", message: "Compliance and risk calculations were sent for validation." });
       }
     } catch (err) {
-      showToast({ type: "error", title: "Audit could not be saved", message: apiErrorMessage(err) });
+      await saveAuditOffline(`Live submit failed: ${apiErrorMessage(err)}. It will sync when the backend/database is available.`);
     } finally {
       setSubmitting(false);
     }

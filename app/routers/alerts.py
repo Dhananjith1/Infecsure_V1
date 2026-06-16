@@ -18,7 +18,7 @@ from app.dependencies import get_current_user, require_role
 from app.models.alert import Alert, DoctorInstructionRequest, RejectAlertRequest, ValidateAlertRequest
 from app.models.auth import TokenData
 from app.models.user import UserRole
-from app.services import email_service, firebase_service as fs, ml_service
+from app.services import email_service, fallback_data, firebase_service as fs, ml_service
 
 router = APIRouter(prefix="/alerts", tags=["Alerts & Validation Gate"])
 
@@ -51,13 +51,31 @@ async def list_alerts(
 
     if role == UserRole.ICNO.value:
         # ICNO sees everything, can filter by status
-        alerts = fs.list_alerts(status=alert_status)
+        try:
+            alerts = fs.list_alerts(status=alert_status)
+        except Exception as exc:
+            if fallback_data.is_quota_error(exc):
+                alerts = [a for a in fallback_data.ALERTS if not alert_status or a.get("status") == alert_status]
+            else:
+                raise
     elif role == UserRole.SISTER.value:
         # Sister sees only approved
-        alerts = fs.list_alerts(status="approved")
+        try:
+            alerts = fs.list_alerts(status="approved")
+        except Exception as exc:
+            if fallback_data.is_quota_error(exc):
+                alerts = [a for a in fallback_data.ALERTS if a.get("status") == "approved"]
+            else:
+                raise
     elif role == UserRole.DOCTOR.value:
         # Doctor sees approved alerts targeting them
-        alerts = fs.list_alerts(status="approved")
+        try:
+            alerts = fs.list_alerts(status="approved")
+        except Exception as exc:
+            if fallback_data.is_quota_error(exc):
+                alerts = [a for a in fallback_data.ALERTS if a.get("status") == "approved"]
+            else:
+                raise
         alerts = [
             a for a in alerts
             if "doctor" in a.get("target_roles", []) or "icno" not in a.get("target_roles", [])
@@ -70,13 +88,23 @@ async def list_alerts(
 
 @router.get("/pending", summary="List pending alerts for ICNO validation")
 async def list_pending_alerts(_: TokenData = _ICNO_ONLY):
-    return fs.list_alerts(status="pending", limit=200)
+    try:
+        return fs.list_alerts(status="pending", limit=200)
+    except Exception as exc:
+        if fallback_data.is_quota_error(exc):
+            return [a for a in fallback_data.ALERTS if a.get("status") == "pending"]
+        raise
 
 
 @router.get("/analytics/dashboard", summary="Dashboard summary (ICNO / Sister)")
 async def get_dashboard(_: TokenData = _ICNO_OR_SISTER):
     """Returns aggregate hospital statistics for the ICNO/Matron dashboard."""
-    return ml_service.get_dashboard_summary()
+    try:
+        return ml_service.get_dashboard_summary()
+    except Exception as exc:
+        if fallback_data.is_quota_error(exc):
+            return fallback_data.dashboard_summary()
+        raise
 
 
 @router.get("/analytics/root-cause", summary="Apriori Root Cause Analysis (ICNO only)")
@@ -92,7 +120,12 @@ async def get_root_cause(
     audit failures and pathogen detections.
     Returns sorted association rules with human-readable interpretations.
     """
-    return ml_service.find_root_cause_associations(min_support, min_confidence, min_lift, max_rules)
+    try:
+        return ml_service.find_root_cause_associations(min_support, min_confidence, min_lift, max_rules)
+    except Exception as exc:
+        if fallback_data.is_quota_error(exc):
+            return fallback_data.ROOT_CAUSE_RULES[:max_rules]
+        raise
 
 
 @router.get("/management-instructions", summary="List doctor management instructions")

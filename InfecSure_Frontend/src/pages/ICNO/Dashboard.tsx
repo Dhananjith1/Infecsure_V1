@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, Camera, ClipboardCheck, ShieldCheck, TrendingUp } from "lucide-react";
+import { Camera, ClipboardCheck, ShieldCheck, TrendingUp } from "lucide-react";
 import { dashboardSummary, getRootCauseInsights, listPendingAlerts } from "../../api/alerts";
 import { getHeatmap, getPublicHeatmap } from "../../api/heatmap";
 import { getPriorityList } from "../../api/audits";
@@ -8,6 +8,7 @@ import { Button } from "../../components/Button";
 import { Card, CardBody, CardHeader } from "../../components/Card";
 import { HeatmapGrid } from "../../components/HeatmapGrid";
 import { RiskBadge } from "../../components/RiskBadge";
+import { RootCauseInsightCard } from "../../components/RootCauseInsightCard";
 import { Skeleton } from "../../components/Skeleton";
 import type { AlertItem, HeatmapWard } from "../../types";
 
@@ -137,18 +138,7 @@ export function ICNODashboard() {
           {insightLoading ? <Skeleton className="h-24" /> : null}
           {!insightLoading && !insights.length ? <p className="text-sm text-slate-500">No root-cause associations available.</p> : null}
           {insights.slice(0, 4).map((item, index) => (
-            <article key={index} className="rounded-md border border-slate-200 p-4">
-              <div className="flex gap-3">
-                <AlertTriangle className="mt-1 text-amber-600" size={20} />
-                <div>
-                  <p className="font-semibold text-slate-950">{String(item.interpretation ?? item.rule ?? item.pattern ?? "Association detected")}</p>
-                  <details className="mt-2 text-sm text-slate-600">
-                    <summary className="cursor-pointer font-semibold text-clinical-700">Why is this flagged?</summary>
-                    <pre className="mt-2 whitespace-pre-wrap rounded-md bg-slate-50 p-3 text-xs">{JSON.stringify(item, null, 2)}</pre>
-                  </details>
-                </div>
-              </div>
-            </article>
+            <RootCauseInsightCard key={index} insight={item} />
           ))}
         </CardBody>
       </Card>

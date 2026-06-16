@@ -16,7 +16,7 @@ from app.dependencies import get_current_user, require_role
 from app.models.auth import TokenData
 from app.models.pathogen import Pathogen, PathogenCreate
 from app.models.user import UserRole
-from app.services import firebase_service as fs
+from app.services import fallback_data, firebase_service as fs
 
 router = APIRouter(prefix="/pathogens", tags=["Pathogens"])
 
@@ -28,7 +28,16 @@ _ICNO_OR_LAB = Depends(require_role(UserRole.ICNO, UserRole.LAB))
 @router.get("/", summary="List all pathogens")
 async def list_pathogens(_: TokenData = _ALL_AUTH):
     """Returns the pathogen catalogue accessible to all authenticated users."""
-    return fs.list_pathogens()
+    try:
+        return fs.list_pathogens()
+    except Exception as exc:
+        if fallback_data.is_quota_error(exc):
+            return [
+                {"pathogen_id": "dengue", "name": "Dengue", "category": "virus", "risk_level": "high"},
+                {"pathogen_id": "mrsa", "name": "MRSA", "category": "bacteria", "risk_level": "high"},
+                {"pathogen_id": "covid19", "name": "COVID-19", "category": "virus", "risk_level": "moderate"},
+            ]
+        raise
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED, summary="Create pathogen (ICNO / Lab)")

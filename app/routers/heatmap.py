@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends
 from app.dependencies import get_current_user, require_role
 from app.models.auth import TokenData
 from app.models.user import UserRole
-from app.services import firebase_service as fs
+from app.services import fallback_data, firebase_service as fs
 
 router = APIRouter(prefix="/heatmap", tags=["Hospital Heatmap"])
 
@@ -27,9 +27,25 @@ async def get_heatmap(current_user: TokenData = _ALL_AUTH):
     All roles can access this. Staff role receives slightly aggregated data
     with no individual patient identifiers.
     """
-    wards = fs.list_wards()
-    all_lab_results = fs.list_lab_results(limit=500)
-    all_audits = fs.list_all_audits(limit=500)
+    try:
+        wards = fs.list_wards()
+        all_lab_results = fs.list_lab_results(limit=500)
+        all_audits = fs.list_all_audits(limit=500)
+    except Exception as exc:
+        if fallback_data.is_quota_error(exc):
+            heatmap = fallback_data.heatmap(public_mode=current_user.role == UserRole.STAFF.value)
+            return {
+                "heatmap": heatmap,
+                "summary": {
+                    "total_wards": len(heatmap),
+                    "critical_count": sum(1 for w in heatmap if w["risk_level"] == "critical"),
+                    "high_count": sum(1 for w in heatmap if w["risk_level"] == "high"),
+                    "medium_count": sum(1 for w in heatmap if w["risk_level"] == "medium"),
+                    "low_count": sum(1 for w in heatmap if w["risk_level"] == "low"),
+                },
+                "fallback_reason": "Firestore quota exceeded",
+            }
+        raise
 
     lab_by_ward: dict[str, list[dict]] = {}
     for result in all_lab_results:

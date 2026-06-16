@@ -1,4 +1,5 @@
 import { createContext, useCallback, useEffect, useMemo, useState } from "react";
+import axios from "axios";
 import { login as loginRequest, me, refresh as refreshRequest } from "../api/auth";
 import { REFRESH_KEY, TOKEN_KEY, USER_KEY } from "../api/client";
 import type { UserProfile, UserRole } from "../types";
@@ -65,8 +66,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(normalized);
         sessionStorage.setItem(USER_KEY, JSON.stringify(normalized));
       })
-      .catch(() => {
-        if (active) logout();
+      .catch((error) => {
+        if (!active) return;
+        if (axios.isAxiosError(error) && error.response?.status === 401) {
+          logout();
+          return;
+        }
+        if (user) {
+          setUser(user);
+          sessionStorage.setItem(USER_KEY, JSON.stringify(user));
+        }
       })
       .finally(() => {
         if (active) setLoading(false);

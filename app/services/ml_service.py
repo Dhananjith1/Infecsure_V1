@@ -321,33 +321,66 @@ def calculate_task_priority(ward_ids: Optional[list[str]] = None) -> list[dict[s
     if cached and monotonic() - cached[0] < TASK_PRIORITY_CACHE_SECONDS:
         return cached[1]
 
-    if ward_ids is None:
-        wards = fs.list_wards()
-        ward_ids = [w["ward_id"] for w in wards]
+    wards = fs.list_wards()
+    if ward_ids is not None:
+        requested = set(ward_ids)
+        wards = [ward for ward in wards if ward.get("ward_id") in requested]
+    ward_ids = [w["ward_id"] for w in wards]
+    if not ward_ids:
+        _TASK_PRIORITY_CACHE[cache_key] = (monotonic(), [])
+        return []
+    ward_by_id = {ward["ward_id"]: ward for ward in wards}
+
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=30)
+    audits_by_ward: dict[str, list[dict[str, Any]]] = {}
+    for audit in fs.list_all_audits(limit=500):
+        wid = audit.get("ward_id")
+        if wid in ward_by_id:
+            audits_by_ward.setdefault(wid, []).append(audit)
+
+    lab_by_ward: dict[str, list[dict[str, Any]]] = {}
+    for result in fs.list_lab_results(limit=500):
+        wid = result.get("ward_id")
+        if wid not in ward_by_id:
+            continue
+        created_at = _as_datetime(result.get("created_at"))
+        if created_at and created_at < cutoff:
+            continue
+        lab_by_ward.setdefault(wid, []).append(result)
+
+    pathogen_risk = {
+        pathogen.get("pathogen_id") or pathogen.get("_id"): _pathogen_risk_to_numeric(pathogen.get("risk_level", "low"))
+        for pathogen in fs.list_pathogens()
+    }
 
     priorities = []
-    all_lab_counts = []
-    ward_data = {}
-
-    for wid in ward_ids:
-        fv = _build_feature_vector(wid)
-        ward = fs.get_ward(wid)
-        ward_data[wid] = (fv, ward)
-        if fv:
-            all_lab_counts.append(fv["recent_lab_count"])
-
+    all_lab_counts = [len(lab_by_ward.get(wid, [])) for wid in ward_ids]
     max_lab = max(all_lab_counts) if all_lab_counts else 1
     if max_lab == 0:
         max_lab = 1
 
     for wid in ward_ids:
-        fv, ward = ward_data.get(wid, (None, None))
-        if not fv or not ward:
+        ward = ward_by_id.get(wid)
+        if not ward:
             continue
 
-        C = max(0.0, (100.0 - fv["compliance_score"])) / 100.0
-        V = fv["max_virulence"]
-        L = fv["recent_lab_count"] / max_lab
+        audits = audits_by_ward.get(wid, [])
+        latest_audit = audits[-1] if audits else {}
+        compliance = latest_audit.get("overall_compliance_score", ward.get("compliance_score", 100.0))
+        recent_lab = lab_by_ward.get(wid, [])
+        anomaly_count = sum(
+            1 for result in recent_lab
+            if result.get("anomaly", {}) and result["anomaly"].get("is_anomaly", False)
+        )
+        max_virulence = max(
+            [pathogen_risk.get(result.get("pathogen_id"), 1.0) for result in recent_lab],
+            default=0.0,
+        )
+
+        C = max(0.0, (100.0 - compliance)) / 100.0
+        V = max_virulence
+        L = len(recent_lab) / max_lab
 
         priority_score = (W1_COMPLIANCE * C) + (W2_PATHOGEN_VIRULENCE * V) + (W3_LAB_LOAD * L)
         priority_score_100 = round(priority_score * 100, 2)
@@ -358,9 +391,9 @@ def calculate_task_priority(ward_ids: Optional[list[str]] = None) -> list[dict[s
             "priority_score": priority_score_100,
             "compliance_deficit": round(C * 100, 1),
             "max_virulence": round(V, 3),
-            "recent_lab_count": fv["recent_lab_count"],
-            "anomaly_count": fv["anomaly_count"],
-            "recommended_action": _recommend_action(C, V, fv["anomaly_count"]),
+            "recent_lab_count": len(recent_lab),
+            "anomaly_count": anomaly_count,
+            "recommended_action": _recommend_action(C, V, anomaly_count),
         })
 
     priorities.sort(key=lambda x: x["priority_score"], reverse=True)
@@ -478,10 +511,25 @@ def find_root_cause_associations(
     _ROOT_CAUSE_CACHE[cache_key] = (monotonic(), limited_result)
     return limited_result
 
+def _format_rule_item(item: str) -> str:
+    labels = {
+        "FAIL:hand_hygiene": "hand hygiene failure",
+        "FAIL:ppe": "PPE compliance failure",
+        "FAIL:waste_segregation": "waste segregation failure",
+        "FAIL:environmental": "environmental hygiene failure",
+        "EVENT:anomaly_detected": "Z-score anomaly",
+    }
+    if item in labels:
+        return labels[item]
+    if item.startswith("PATHOGEN:"):
+        return f"{item.removeprefix('PATHOGEN:').replace('_', ' ').title()} detection"
+    return item.replace("_", " ").lower()
+
+
 def _interpret_rule(antecedents: list, consequents: list, confidence: float) -> str:
-    ant_str = " & ".join(a.replace("FAIL:", "Failed ").replace("PATHOGEN:", "Pathogen: ").replace("_", " ").title() for a in antecedents)
-    con_str = " & ".join(c.replace("FAIL:", "Failed ").replace("PATHOGEN:", "Pathogen: ").replace("EVENT:", "Event: ").replace("_", " ").title() for c in consequents)
-    return f"When [{ant_str}], there is a {confidence*100:.0f}% chance of [{con_str}]."
+    ant_str = " and ".join(_format_rule_item(str(item)) for item in antecedents)
+    con_str = " and ".join(_format_rule_item(str(item)) for item in consequents)
+    return f"When {ant_str} occurs, {con_str} is associated with it in {confidence*100:.0f}% of matching patterns."
 
 
 # ─── 5. Dashboard Summary ────────────────────────────────────────────────────

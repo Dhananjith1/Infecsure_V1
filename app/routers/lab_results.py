@@ -10,7 +10,7 @@ from app.dependencies import get_current_user, require_role
 from app.models.auth import TokenData
 from app.models.lab import LabResultCreate
 from app.models.user import UserRole
-from app.services import domain_service, firebase_service as fs
+from app.services import domain_service, fallback_data, firebase_service as fs
 
 router = APIRouter(prefix="/lab-results", tags=["Laboratory Results"])
 
@@ -48,7 +48,13 @@ async def list_lab_results(
     Returns all lab results.
     Staff role receives masked data with no patient identifiers.
     """
-    results = fs.list_lab_results(ward_id=ward_id)
+    try:
+        results = fs.list_lab_results(ward_id=ward_id)
+    except Exception as exc:
+        if fallback_data.is_quota_error(exc):
+            results = [r for r in fallback_data.LAB_RESULTS if not ward_id or r.get("ward_id") == ward_id]
+        else:
+            raise
     if current_user.role == UserRole.STAFF.value:
         return [
             {
