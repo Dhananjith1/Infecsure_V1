@@ -30,21 +30,17 @@ logger = logging.getLogger(__name__)
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
-# Z-Score thresholds
 Z_SCORE_WARNING = 2.0
 Z_SCORE_CRITICAL = 3.0
 
-# Risk heuristic weights (must sum to 1)
 W1_COMPLIANCE = 0.40   # Audit compliance deficit weight
 W2_PATHOGEN_VIRULENCE = 0.35  # Pathogen risk level weight
 W3_LAB_LOAD = 0.25     # Recent lab result volume weight
 
-# Random Forest — kept small to limit training RAM
 RF_N_ESTIMATORS = 50
 RF_RANDOM_STATE = 42
 RF_MAX_DEPTH = 10
 
-# Risk thresholds (0–100 scale)
 RISK_THRESHOLD_LOW = 25.0
 RISK_THRESHOLD_MEDIUM = 50.0
 RISK_THRESHOLD_HIGH = 75.0
@@ -64,9 +60,9 @@ def _risk_level_from_score(score: float) -> str:
 
 
 def _pathogen_risk_to_numeric(risk_level: str) -> float:
-    """Map string risk level to 0-1 numeric weight."""
-    return {"low": 0.2, "moderate": 0.5, "high": 0.8, "critical": 1.0}.get(
-        risk_level.lower(), 0.5
+    # Changed to 1.0, 2.0, 3.0 to match the Exact Spec Document
+    return {"low": 1.0, "moderate": 2.0, "high": 3.0, "critical": 3.0}.get(
+        risk_level.lower(), 1.0
     )
 
 
@@ -82,20 +78,13 @@ def _as_datetime(value: Any) -> Optional[datetime]:
     return None
 
 
-# ─── 1. Z-Score Anomaly Detection (SAFE - NO NUMPY) ───────────────────────────
+# ─── 1. Z-Score Anomaly Detection ─────────────────────────────────────────────
 
 def detect_anomaly(pathogen_id: str, new_count: int) -> dict[str, Any]:
-    """
-    Compute Z-Score for a new pathogen count against historical distribution.
-    Safe version — handles missing numpy, empty history, and Firestore errors.
-    Pure-Python implementation; no heavy imports needed.
-    """
     try:
-        # Fetch rolling stats from Firestore
         stats = fs.get_pathogen_stats(pathogen_id)
 
         if stats is None or stats.get("count", 0) < 5:
-            # Insufficient history — safe pure-python fallback
             try:
                 history = fs.get_pathogen_history(pathogen_id, limit=90) or []
                 counts = [r.get("colony_count", 1) for r in history if r.get("colony_count") is not None]
@@ -128,10 +117,8 @@ def detect_anomaly(pathogen_id: str, new_count: int) -> dict[str, Any]:
         std = float(stats.get("std", 0))
         count = int(stats.get("count", 0))
 
-        # Avoid division by zero
         z = (new_count - mean) / std if std > 0 else 0.0
 
-        # Update rolling mean / std using Welford's online algorithm
         new_count_total = count + 1
         delta = new_count - mean
         new_mean = mean + delta / new_count_total
@@ -175,15 +162,10 @@ def detect_anomaly(pathogen_id: str, new_count: int) -> dict[str, Any]:
 # ─── 2. Random Forest Outbreak Risk Prediction ────────────────────────────────
 
 def _build_feature_vector(ward_id: str) -> Optional[dict[str, float]]:
-    """
-    Build a feature vector for a ward from latest audit + lab data.
-    Returns None if insufficient data.
-    """
     ward = fs.get_ward(ward_id)
     if not ward:
         return None
 
-    # Audit features — latest audit
     audits = fs.list_audits_for_ward(ward_id, limit=5)
     if audits:
         latest_audit = audits[-1]
@@ -197,8 +179,8 @@ def _build_feature_vector(ward_id: str) -> Optional[dict[str, float]]:
         hand_hygiene = 100.0
         ppe_score = 100.0
         waste_score = 100.0
+        env_score = 100.0
 
-    # Lab features — last 30 days
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=30)
     lab_results = fs.list_lab_results(ward_id=ward_id, limit=200)
@@ -213,7 +195,6 @@ def _build_feature_vector(ward_id: str) -> Optional[dict[str, float]]:
         if r.get("anomaly", {}) and r["anomaly"].get("is_anomaly", False)
     )
 
-    # Max pathogen virulence
     max_virulence = 0.0
     for r in recent_results:
         pathogen = fs.get_pathogen(r.get("pathogen_id", ""))
@@ -226,6 +207,7 @@ def _build_feature_vector(ward_id: str) -> Optional[dict[str, float]]:
         "hand_hygiene_score": hand_hygiene,
         "ppe_score": ppe_score,
         "waste_score": waste_score,
+        "environmental_score": env_score,
         "recent_lab_count": len(recent_results),
         "anomaly_count": anomaly_count,
         "max_virulence": max_virulence,
@@ -234,61 +216,49 @@ def _build_feature_vector(ward_id: str) -> Optional[dict[str, float]]:
             if audits and _as_datetime(audits[-1].get("created_at"))
             else 30
         ),
-        "environmental_score": env_score,
     }
 
 
 def predict_outbreak_risk(ward_id: str) -> dict[str, Any]:
-    """
-    Use the pre-trained Random Forest Classifier (ml_models/rf_outbreak_model.pkl)
-    to predict outbreak risk for a given ward.
-    """
     import joblib
     import numpy as np
     
-    # ── 1. Load the pre-trained model ───────────────────────────────────────
     try:
         rf_model = joblib.load("ml_models/rf_outbreak_model.pkl")
     except Exception as e:
         logger.error(f"Failed to load pre-trained RF model: {e}")
         return _heuristic_fallback_risk(ward_id)
 
-    # ── 2. Get current real-time data for the ward ────────────────────────
     target_fv = _build_feature_vector(ward_id)
     if not target_fv:
         return {"ward_id": ward_id, "risk_score": 0.0, "risk_score_percent": 0.0, "risk_level": "low",
-                "confidence": 0.0, "alert_created": False}
+                "confidence": 0.0, "feature_importance": {}, "alert_created": False}
 
-    # ── 3. Prepare data array (must match training feature order exactly) ──
+    feature_names = [
+        "hand_hygiene_score", "ppe_score", "waste_score", "environmental_score", 
+        "recent_lab_count", "anomaly_count", "max_virulence", "days_since_last_audit"
+    ]
+
     target_row = np.array([[
-        float(target_fv.get("hand_hygiene_score", 100)),
-        float(target_fv.get("ppe_score", 100)),
-        float(target_fv.get("waste_score", 100)),
-        float(target_fv.get("environmental_score", 100)), 
-        float(target_fv.get("recent_lab_count", 0)),
-        float(target_fv.get("anomaly_count", 0)),
-        float(target_fv.get("max_virulence", 0)),
-        float(target_fv.get("days_since_last_audit", 30))
+        float(target_fv.get(f, 0)) for f in feature_names
     ]], dtype=np.float32)
 
-    # ── 4. Make Prediction ────────────────────────────────────────────────
     proba = rf_model.predict_proba(target_row)[0]
     risk_probability = float(proba[1])
     risk_score_percent = risk_probability * 100
     risk_level = _risk_level_from_score(risk_score_percent)
 
-    # ── 5. Update ward in Firestore ───────────────────────────────────────
+    # ── Feature Importance Extraction (NEW) ──
+    importances = rf_model.feature_importances_
+    feature_importance_dict = {
+        name: round(float(imp), 4) for name, imp in zip(feature_names, importances)
+    }
+
     try:
-        fs.update_ward_risk(
-            ward_id,
-            risk_probability,
-            risk_level,
-            target_fv.get("compliance_score", 100.0),
-        )
+        fs.update_ward_risk(ward_id, risk_probability, risk_level, target_fv.get("compliance_score", 100.0))
     except Exception as e:
         logger.warning(f"Could not update ward risk in Firestore: {e}")
 
-    # ── 6. Create alert if high/critical ──────────────────────────────────
     alert_created = False
     if risk_level in ("high", "critical"):
         try:
@@ -298,21 +268,14 @@ def predict_outbreak_risk(ward_id: str) -> dict[str, Any]:
                 "alert_type": "outbreak_risk",
                 "ward_id": ward_id,
                 "title": f"Outbreak Risk Alert — {ward_name}",
-                "description": (
-                    f"AI Model predicts {risk_level.upper()} outbreak risk "
-                    f"(probability: {risk_score_percent:.1f}%) for {ward_name}. "
-                    f"Immediate ICNO review required."
-                ),
+                "description": f"AI Model predicts {risk_level.upper()} outbreak risk (probability: {risk_score_percent:.1f}%) for {ward_name}.",
                 "severity": risk_level,
-                "source_data": {
-                    "risk_score": risk_probability,
-                    "risk_score_percent": risk_score_percent,
-                },
+                "source_data": {"risk_score": risk_probability, "risk_score_percent": risk_score_percent},
                 "target_roles": ["icno", "sister", "doctor"],
             })
             alert_created = True
-        except Exception as e:
-            logger.error(f"Failed to create alert: {e}")
+        except Exception:
+            pass
 
     return {
         "ward_id": ward_id,
@@ -320,12 +283,12 @@ def predict_outbreak_risk(ward_id: str) -> dict[str, Any]:
         "risk_score_percent": round(risk_score_percent, 2),
         "risk_level": risk_level,
         "confidence": round(float(max(proba)), 3),
+        "feature_importance": feature_importance_dict, # Included the weights!
         "alert_created": alert_created,
         "model_used": "Pre-trained Random Forest (pkl)"
     }
 
 def _heuristic_fallback_risk(ward_id: str) -> dict[str, Any]:
-    """Simple compliance-based fallback when RF has insufficient training data."""
     ward = fs.get_ward(ward_id)
     compliance = ward.get("compliance_score", 100.0) if ward else 100.0
     risk_score_percent = max(0.0, 100.0 - compliance)
@@ -416,11 +379,6 @@ def find_root_cause_associations(
     min_confidence: float = 0.5,
     min_lift: float = 1.0,
 ) -> list[dict[str, Any]]:
-    """
-    Mine association rules from ward audit and lab data.
-    Heavy imports (mlxtend, pandas) are loaded lazily inside this function.
-    """
-    # ── Lazy imports ───────────────────────────────────────────────────────
     try:
         import pandas as pd  # noqa: PLC0415
         from mlxtend.frequent_patterns import apriori, association_rules  # noqa: PLC0415
@@ -490,7 +448,6 @@ def find_root_cause_associations(
     result.sort(key=lambda x: x["lift"], reverse=True)
     return result
 
-
 def _interpret_rule(antecedents: list, consequents: list, confidence: float) -> str:
     ant_str = " & ".join(a.replace("FAIL:", "Failed ").replace("PATHOGEN:", "Pathogen: ").replace("_", " ").title() for a in antecedents)
     con_str = " & ".join(c.replace("FAIL:", "Failed ").replace("PATHOGEN:", "Pathogen: ").replace("EVENT:", "Event: ").replace("_", " ").title() for c in consequents)
@@ -526,3 +483,4 @@ def get_dashboard_summary() -> dict[str, Any]:
         "recent_anomalies": anomaly_count,
         "hospital_risk_level": _risk_level_from_score(100.0 - avg_compliance),
     }
+
