@@ -129,7 +129,13 @@ def get_ward_by_name(name: str) -> Optional[dict]:
 
 def list_wards() -> list[dict]:
     wards = list_collection("wards", order_by="name", limit=100)
-    return [ward for ward in wards if ward.get("ward_id") in ALLOWED_WARD_IDS or ward.get("_id") in ALLOWED_WARD_IDS]
+    allowed_wards = []
+    for ward in wards:
+        ward_id = ward.get("ward_id") or ward.get("_id")
+        if ward_id in ALLOWED_WARD_IDS:
+            ward["ward_id"] = ward_id
+            allowed_wards.append(ward)
+    return allowed_wards
 
 
 def update_ward_risk(ward_id: str, risk_score: float, risk_level: str, compliance_score: float) -> None:

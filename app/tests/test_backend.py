@@ -406,7 +406,7 @@ class TestEmailService:
 
 class TestRouteContracts:
     def test_expected_checklist_routes_exist(self):
-        route_paths = {route.path for route in app.routes}
+        route_paths = set(app.openapi()["paths"])
         expected = {
             "/auth/login",
             "/audits/sync",
