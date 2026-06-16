@@ -22,6 +22,7 @@ import gc
 import logging
 import math
 from datetime import datetime, timedelta, timezone
+from time import monotonic
 from typing import Any, Optional
 
 from app.services import firebase_service as fs
@@ -44,6 +45,11 @@ RF_MAX_DEPTH = 10
 RISK_THRESHOLD_LOW = 25.0
 RISK_THRESHOLD_MEDIUM = 50.0
 RISK_THRESHOLD_HIGH = 75.0
+
+ROOT_CAUSE_CACHE_SECONDS = 120
+_ROOT_CAUSE_CACHE: dict[tuple[float, float, float, int], tuple[float, list[dict[str, Any]]]] = {}
+TASK_PRIORITY_CACHE_SECONDS = 120
+_TASK_PRIORITY_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 
 
 # ─── Helper Utilities ─────────────────────────────────────────────────────────
@@ -310,6 +316,11 @@ def _heuristic_fallback_risk(ward_id: str) -> dict[str, Any]:
 # ─── 3. Risk-Weighted Heuristic Engine ───────────────────────────────────────
 
 def calculate_task_priority(ward_ids: Optional[list[str]] = None) -> list[dict[str, Any]]:
+    cache_key = ",".join(sorted(ward_ids)) if ward_ids else "all"
+    cached = _TASK_PRIORITY_CACHE.get(cache_key)
+    if cached and monotonic() - cached[0] < TASK_PRIORITY_CACHE_SECONDS:
+        return cached[1]
+
     if ward_ids is None:
         wards = fs.list_wards()
         ward_ids = [w["ward_id"] for w in wards]
@@ -357,6 +368,7 @@ def calculate_task_priority(ward_ids: Optional[list[str]] = None) -> list[dict[s
     for i, p in enumerate(priorities):
         p["rank"] = i + 1
 
+    _TASK_PRIORITY_CACHE[cache_key] = (monotonic(), priorities)
     return priorities
 
 
@@ -378,7 +390,13 @@ def find_root_cause_associations(
     min_support: float = 0.1,
     min_confidence: float = 0.5,
     min_lift: float = 1.0,
+    max_rules: int = 25,
 ) -> list[dict[str, Any]]:
+    cache_key = (min_support, min_confidence, min_lift, max_rules)
+    cached = _ROOT_CAUSE_CACHE.get(cache_key)
+    if cached and monotonic() - cached[0] < ROOT_CAUSE_CACHE_SECONDS:
+        return cached[1]
+
     try:
         import pandas as pd  # noqa: PLC0415
         from mlxtend.frequent_patterns import apriori, association_rules  # noqa: PLC0415
@@ -426,7 +444,17 @@ def find_root_cause_associations(
     if frequent_itemsets.empty:
         return [{"message": f"No frequent itemsets found at min_support={min_support}. Try lowering the threshold."}]
 
-    rules = association_rules(frequent_itemsets, metric="confidence", min_threshold=min_confidence)
+    try:
+        rules = association_rules(frequent_itemsets, metric="confidence", min_threshold=min_confidence)
+    except TypeError as exc:
+        if "num_itemsets" not in str(exc):
+            raise
+        rules = association_rules(
+            frequent_itemsets,
+            num_itemsets=len(frequent_itemsets),
+            metric="confidence",
+            min_threshold=min_confidence,
+        )
     rules = rules[rules["lift"] >= min_lift]
 
     if rules.empty:
@@ -445,8 +473,10 @@ def find_root_cause_associations(
             ),
         })
 
-    result.sort(key=lambda x: x["lift"], reverse=True)
-    return result
+    result.sort(key=lambda x: (x["lift"], x["confidence"], x["support"]), reverse=True)
+    limited_result = result[:max(1, max_rules)]
+    _ROOT_CAUSE_CACHE[cache_key] = (monotonic(), limited_result)
+    return limited_result
 
 def _interpret_rule(antecedents: list, consequents: list, confidence: float) -> str:
     ant_str = " & ".join(a.replace("FAIL:", "Failed ").replace("PATHOGEN:", "Pathogen: ").replace("_", " ").title() for a in antecedents)

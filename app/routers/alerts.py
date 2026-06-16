@@ -84,6 +84,7 @@ async def get_root_cause(
     min_support: float = 0.1,
     min_confidence: float = 0.5,
     min_lift: float = 1.0,
+    max_rules: int = 25,
     _: TokenData = _ICNO_ONLY,
 ):
     """
@@ -91,7 +92,7 @@ async def get_root_cause(
     audit failures and pathogen detections.
     Returns sorted association rules with human-readable interpretations.
     """
-    return ml_service.find_root_cause_associations(min_support, min_confidence, min_lift)
+    return ml_service.find_root_cause_associations(min_support, min_confidence, min_lift, max_rules)
 
 
 @router.get("/management-instructions", summary="List doctor management instructions")

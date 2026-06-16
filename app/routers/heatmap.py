@@ -28,20 +28,33 @@ async def get_heatmap(current_user: TokenData = _ALL_AUTH):
     with no individual patient identifiers.
     """
     wards = fs.list_wards()
+    all_lab_results = fs.list_lab_results(limit=500)
+    all_audits = fs.list_all_audits(limit=500)
+
+    lab_by_ward: dict[str, list[dict]] = {}
+    for result in all_lab_results:
+        ward_id = result.get("ward_id")
+        if ward_id:
+            lab_by_ward.setdefault(ward_id, []).append(result)
+
+    audits_by_ward: dict[str, list[dict]] = {}
+    for audit in all_audits:
+        ward_id = audit.get("ward_id")
+        if ward_id:
+            audits_by_ward.setdefault(ward_id, []).append(audit)
+
     heatmap = []
 
     for ward in wards:
         ward_id = ward["ward_id"]
 
-        # Anomaly count for this ward from recent lab results
-        lab_results = fs.list_lab_results(ward_id=ward_id, limit=100)
+        lab_results = lab_by_ward.get(ward_id, [])
         anomaly_count = sum(
             1 for r in lab_results
             if r.get("anomaly") and r["anomaly"].get("is_anomaly", False)
         )
 
-        # Latest audit
-        audits = fs.list_audits_for_ward(ward_id, limit=1)
+        audits = audits_by_ward.get(ward_id, [])
         last_audit_date = None
         if audits:
             last_audit_date = str(audits[-1].get("created_at", ""))[:10]

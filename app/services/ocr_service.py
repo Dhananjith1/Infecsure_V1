@@ -118,14 +118,18 @@ def _extract_moh_fields(raw_text: str) -> dict[str, Any]:
         fields["ward_id"] = ward
 
     # 2. MoH Form එකේ තියෙන රෝගියාගේ නිල දත්ත (Regex Patterns)
+    next_label = (
+        r"(?=\s+(?:name|age|sex|address|disease|ward|date of onset|onset|"
+        r"date notified|notified)\s*:|$)"
+    )
     patterns = {
-        "patient_name":    r"(?i)name[:\s]+([A-Za-z\s\.]+)",
-        "age":             r"(?i)age[:\s]+(\d{1,3})",
-        "sex":             r"(?i)sex[:\s]+(male|female|m|f)",
-        "address":         r"(?i)address[:\s]+(.+?)(?:\n|$)",
-        "disease":         r"(?i)disease[:\s]+(.+?)(?:\n|$)",
-        "date_of_onset":   r"(?i)(?:date of onset|onset)[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})",
-        "date_notified":   r"(?i)(?:date notified|notified)[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})",
+        "patient_name":    r"(?i)\bname\s*:\s*([A-Za-z\s\.]+?)" + next_label,
+        "age":             r"(?i)\bage\s*:\s*(\d{1,3})",
+        "sex":             r"(?i)\bsex\s*:\s*(male|female|m|f)",
+        "address":         r"(?i)\baddress\s*:\s*(.+?)" + next_label,
+        "disease":         r"(?i)\bdisease\s*:\s*(.+?)" + next_label,
+        "date_of_onset":   r"(?i)(?:date of onset|onset)\s*:\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})",
+        "date_notified":   r"(?i)(?:date notified|notified)\s*:\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})",
     }
 
     for field, pattern in patterns.items():
@@ -196,6 +200,13 @@ def process_image(image_base64: str, form_type: str = "general") -> dict[str, An
 
     if reader is not None:
         results = reader.readtext(processed, detail=1, paragraph=False)
+        results = sorted(
+            results,
+            key=lambda item: (
+                min(point[1] for point in item[0]),
+                min(point[0] for point in item[0]),
+            ),
+        )
         raw_parts = []
         for (bbox, text, confidence) in results:
             raw_parts.append(text)
