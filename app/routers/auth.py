@@ -41,7 +41,7 @@ async def login(
 ):
     """
     Verify the submitted email/password with Firebase Authentication, then
-    load the user's InfecSure RBAC role from Firestore `users/{firebase_uid}`.
+    load the user's InfecSure RBAC role from Firestore.
     """
     email = body.email.lower().strip()
     password = body.password
@@ -66,11 +66,14 @@ async def login(
             detail="Firebase sign-in response did not include localId.",
         )
 
-    user_doc = fs.get_user_by_uid(uid)
+    user_doc = fs.get_user_by_uid(uid) or fs.get_user_by_email(email)
     if not user_doc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"No Firestore users/{uid} profile exists for this Firebase account.",
+            detail=(
+                f"No Firestore users/{uid} profile or users email profile exists "
+                "for this Firebase account."
+            ),
         )
 
     if user_doc.get("is_active") is False:
@@ -116,7 +119,7 @@ async def refresh_token(body: RefreshRequest):
 @router.get("/me", summary="Get current user profile")
 async def get_me(current_user: TokenData = Depends(get_current_user)):
     """Return the authenticated user's Firestore profile when available."""
-    user_doc = fs.get_user_by_uid(current_user.uid)
+    user_doc = fs.get_user_by_uid(current_user.uid) or fs.get_user_by_email(current_user.email)
     if user_doc:
         return user_doc
     return {

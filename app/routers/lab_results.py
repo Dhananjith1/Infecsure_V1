@@ -52,9 +52,9 @@ async def list_lab_results(
     if current_user.role == UserRole.STAFF.value:
         return [
             {
-                "result_id": r["result_id"],
-                "ward_id": r["ward_id"],
-                "pathogen_name": r["pathogen_name"],
+                "result_id": r.get("result_id") or r.get("_id"),
+                "ward_id": r.get("ward_id"),
+                "pathogen_name": r.get("pathogen_name"),
                 "specimen_type": r.get("specimen_type"),
                 "result_date": r.get("result_date"),
                 "anomaly": r.get("anomaly"),
