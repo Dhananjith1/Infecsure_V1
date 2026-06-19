@@ -35,15 +35,11 @@ const labSections = [
 
 const doctorSections = [
   { label: "Clinical Inbox", to: "/doctor?tab=alerts", tab: "alerts", icon: Bell },
+  { label: "Dengue Reports", to: "/doctor?tab=reports", tab: "reports", icon: FileText },
   { label: "Instructions", to: "/doctor?tab=instructions", tab: "instructions", icon: MessageSquare },
 ];
 
-const staffSections = [
-  { label: "Shared Portal", to: "/public/notices?tab=portal", tab: "portal", icon: FileCheck },
-  { label: "Notices", to: "/public/notices?tab=notices", tab: "notices", icon: ClipboardList },
-  { label: "Heatmap", to: "/public/heatmap", tab: "heatmap", icon: Activity },
-  { label: "Anonymization", to: "/public/notices?tab=anonymization", tab: "anonymization", icon: ShieldCheck },
-];
+const staffSections: typeof sisterSections = [];
 
 export function defaultRouteForRole(role: UserRole | null) {
   if (role === "icno") return "/icno";
@@ -58,7 +54,7 @@ export function Sidebar() {
   const location = useLocation();
   const visible = navItems.filter((item) => !item.roles || (role && item.roles.includes(role)));
   const currentTab = new URLSearchParams(location.search).get("tab")
-    || (role === "lab" ? "entry" : role === "doctor" ? "alerts" : role === "staff" ? (location.pathname === "/public/heatmap" ? "heatmap" : "portal") : "overview");
+    || (role === "lab" ? "entry" : role === "doctor" ? "alerts" : "overview");
   const dashboardSections = role === "sister" && location.pathname === "/sister"
     ? sisterSections
     : role === "lab" && location.pathname === "/lab"

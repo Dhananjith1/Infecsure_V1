@@ -47,9 +47,9 @@ async def create_audit(
 
 
 @router.get("/", summary="List all audits")
-async def list_audits(current_user: TokenData = _ALL_AUTH):
+async def list_audits(limit: int = 50, current_user: TokenData = _ALL_AUTH):
     """Returns all ward audit records. Accessible to all authenticated roles."""
-    return fs.list_all_audits()
+    return fs.list_all_audits(limit=min(max(limit, 1), 100))
 
 
 @router.post("/sync", status_code=status.HTTP_201_CREATED, summary="Sync offline PWA audit records")

@@ -41,6 +41,9 @@ type AuditRecord = {
 };
 
 type DashboardTab = "overview" | "trends" | "heatmap" | "analytics" | "reports" | "summary";
+type FeedKey = "audits" | "alerts" | "lab";
+
+const FAST_FEED_TIMEOUT = 12000;
 
 function localDateKey(date: Date) {
   const year = date.getFullYear();
@@ -68,7 +71,7 @@ function toDateKey(value?: string) {
   if (!value) return "";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return String(value).slice(0, 10);
-  return parsed.toISOString().slice(0, 10);
+  return localDateKey(parsed);
 }
 
 function inDateRange(value: string, from: string, to: string) {
@@ -77,6 +80,10 @@ function inDateRange(value: string, from: string, to: string) {
   if (from && key < from) return false;
   if (to && key > to) return false;
   return true;
+}
+
+function latestDateKey(records: string[]) {
+  return records.filter(Boolean).sort((a, b) => b.localeCompare(a))[0] || "";
 }
 
 function riskCount(wards: HeatmapWard[], levels: string[]) {
@@ -157,6 +164,12 @@ export function SisterDashboard() {
   const [reports, setReports] = useState<ReportRecord[]>([]);
   const [summary, setSummary] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [dailyLoading, setDailyLoading] = useState<Record<FeedKey, boolean>>({
+    audits: true,
+    alerts: true,
+    lab: true,
+  });
+  const [dailyErrors, setDailyErrors] = useState<Partial<Record<FeedKey, string>>>({});
   const [exporting, setExporting] = useState<"pdf" | "excel" | null>(null);
   const [searchParams] = useSearchParams();
   const [reportDate, setReportDate] = useState(todayDateKey());
@@ -172,23 +185,47 @@ export function SisterDashboard() {
     let mounted = true;
     async function loadDashboard() {
       setLoading(true);
-      const [heatmapResult, alertsResult, insightResult, reportsResult, labResult, summaryResult, auditResult] = await Promise.allSettled([
+      setDailyLoading({ audits: true, alerts: true, lab: true });
+      setDailyErrors({});
+
+      const [auditResult, alertsResult, labResult] = await Promise.allSettled([
+        listAudits({ timeout: FAST_FEED_TIMEOUT, limit: 40 }),
+        listAlerts("approved", { timeout: FAST_FEED_TIMEOUT, limit: 40 }),
+        listLabResults(undefined, { timeout: FAST_FEED_TIMEOUT, limit: 40 }),
+      ]);
+      if (!mounted) return;
+      if (auditResult.status === "fulfilled") {
+        setAudits(Array.isArray(auditResult.value) ? auditResult.value : []);
+      } else {
+        setDailyErrors((current) => ({ ...current, audits: apiErrorMessage(auditResult.reason) }));
+      }
+      if (alertsResult.status === "fulfilled") {
+        setAlerts(alertsResult.value || []);
+      } else {
+        setDailyErrors((current) => ({ ...current, alerts: apiErrorMessage(alertsResult.reason) }));
+      }
+      if (labResult.status === "fulfilled") {
+        setLabResults(labResult.value || []);
+      } else {
+        setDailyErrors((current) => ({ ...current, lab: apiErrorMessage(labResult.reason) }));
+      }
+      setDailyLoading({
+        audits: false,
+        alerts: false,
+        lab: false,
+      });
+
+      const [heatmapResult, insightResult, reportsResult, summaryResult] = await Promise.allSettled([
         getHeatmapWithFallback(),
-        listAlerts("approved"),
         getRootCauseInsights(),
         listReports(),
-        listLabResults(),
         dashboardSummary(),
-        listAudits(),
       ]);
       if (!mounted) return;
       if (heatmapResult.status === "fulfilled") setWards(heatmapResult.value.heatmap || []);
-      if (alertsResult.status === "fulfilled") setAlerts(alertsResult.value || []);
       if (insightResult.status === "fulfilled") setInsights(Array.isArray(insightResult.value) ? insightResult.value : insightResult.value?.rules || []);
       if (reportsResult.status === "fulfilled") setReports(Array.isArray(reportsResult.value) ? reportsResult.value : []);
-      if (labResult.status === "fulfilled") setLabResults(labResult.value || []);
       if (summaryResult.status === "fulfilled") setSummary(summaryResult.value);
-      if (auditResult.status === "fulfilled") setAudits(Array.isArray(auditResult.value) ? auditResult.value : []);
       setLoading(false);
     }
     loadDashboard().catch((error) => {
@@ -200,6 +237,23 @@ export function SisterDashboard() {
       mounted = false;
     };
   }, [showToast]);
+
+  const availableReportDate = useMemo(() => {
+    return latestDateKey([
+      ...audits.map((audit) => toDateKey(audit.created_at || audit.audit_date)),
+      ...alerts.map((alert) => toDateKey(alert.created_at)),
+      ...labResults.map((result) => toDateKey(result.result_date || result.created_at)),
+    ]);
+  }, [alerts, audits, labResults]);
+
+  useEffect(() => {
+    const hasSelectedDateData = audits.some((audit) => toDateKey(audit.created_at || audit.audit_date) === reportDate)
+      || alerts.some((alert) => toDateKey(alert.created_at) === reportDate)
+      || labResults.some((result) => toDateKey(result.result_date || result.created_at) === reportDate);
+    if (!hasSelectedDateData && availableReportDate && reportDate === todayDateKey()) {
+      setReportDate(availableReportDate);
+    }
+  }, [alerts, audits, availableReportDate, labResults, reportDate]);
 
   const pathogenOptions = useMemo(() => {
     const names = new Set<string>();
@@ -272,9 +326,25 @@ export function SisterDashboard() {
     return alerts.filter((alert) => toDateKey(alert.created_at) === reportDate);
   }, [alerts, reportDate]);
 
+  const visibleAlerts = useMemo(() => {
+    if (dailyAlerts.length) return dailyAlerts;
+    return alerts
+      .slice()
+      .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
+      .slice(0, 5);
+  }, [alerts, dailyAlerts]);
+
   const dailyLabResults = useMemo(() => {
     return labResults.filter((result) => toDateKey(result.result_date || result.created_at) === reportDate);
   }, [labResults, reportDate]);
+
+  const visibleLabResults = useMemo(() => {
+    if (dailyLabResults.length) return dailyLabResults;
+    return labResults
+      .slice()
+      .sort((a, b) => String(b.result_date || b.created_at || "").localeCompare(String(a.result_date || a.created_at || "")))
+      .slice(0, 8);
+  }, [dailyLabResults, labResults]);
 
   const dailyAverageCompliance = useMemo(() => {
     const scores = dailyAudits
@@ -291,6 +361,7 @@ export function SisterDashboard() {
   }, [dailyAudits]);
 
   const highRiskCount = riskCount(wards, ["high", "critical", "red"]);
+  const dailyReportLoading = dailyLoading.audits || dailyLoading.alerts || dailyLoading.lab;
   const averageCompliance = Number(summary?.average_compliance ?? 0);
   const maxDate = todayDateKey();
   const tabParam = searchParams.get("tab");
@@ -472,22 +543,28 @@ export function SisterDashboard() {
                 <div className="grid gap-3 sm:grid-cols-4">
                   <div className="rounded-md border border-slate-200 p-3">
                     <p className="text-xs font-semibold uppercase text-slate-500">Ward audits</p>
-                    <p className="mt-1 text-2xl font-bold text-slate-950">{dailyAudits.length}</p>
+                    {dailyReportLoading ? <Skeleton className="mt-2 h-8 w-12" /> : <p className="mt-1 text-2xl font-bold text-slate-950">{dailyAudits.length}</p>}
                   </div>
                   <div className="rounded-md border border-slate-200 p-3">
                     <p className="text-xs font-semibold uppercase text-slate-500">Avg compliance</p>
-                    <p className={`mt-1 text-2xl font-bold ${scoreTone(dailyAverageCompliance ?? undefined)}`}>{dailyAverageCompliance !== null ? `${dailyAverageCompliance}%` : "N/A"}</p>
+                    {dailyReportLoading ? <Skeleton className="mt-2 h-8 w-14" /> : <p className={`mt-1 text-2xl font-bold ${scoreTone(dailyAverageCompliance ?? undefined)}`}>{dailyAverageCompliance !== null ? `${dailyAverageCompliance}%` : "N/A"}</p>}
                   </div>
                   <div className="rounded-md border border-slate-200 p-3">
                     <p className="text-xs font-semibold uppercase text-slate-500">Approved alerts</p>
-                    <p className="mt-1 text-2xl font-bold text-amber-700">{dailyAlerts.length}</p>
+                    {dailyReportLoading ? <Skeleton className="mt-2 h-8 w-12" /> : <p className="mt-1 text-2xl font-bold text-amber-700">{visibleAlerts.length}</p>}
                   </div>
                   <div className="rounded-md border border-slate-200 p-3">
                     <p className="text-xs font-semibold uppercase text-slate-500">Lab signals</p>
-                    <p className="mt-1 text-2xl font-bold text-red-700">{dailyLabResults.filter((item) => item.anomaly?.is_anomaly).length}</p>
+                    {dailyReportLoading ? <Skeleton className="mt-2 h-8 w-12" /> : <p className="mt-1 text-2xl font-bold text-red-700">{visibleLabResults.filter((item) => item.anomaly?.is_anomaly).length}</p>}
                   </div>
                 </div>
               </div>
+
+              {availableReportDate && availableReportDate === reportDate && reportDate !== todayDateKey() ? (
+                <p className="rounded-md border border-clinical-200 bg-clinical-50 p-3 text-sm text-clinical-900">
+                  Showing the latest available daily report date because no records were found for today.
+                </p>
+              ) : null}
 
               {lowestAudit ? (
                 <div className="rounded-md border border-amber-200 bg-amber-50 p-4">
@@ -525,7 +602,9 @@ export function SisterDashboard() {
                     ))}
                   </tbody>
                 </table>
-                {!dailyAudits.length ? <p className="p-6 text-center text-sm text-slate-500">No ICNO ward audit records were found for this date.</p> : null}
+                {dailyLoading.audits ? <div className="p-4"><Skeleton className="h-20" /></div> : null}
+                {!dailyLoading.audits && dailyErrors.audits ? <p className="p-6 text-center text-sm text-red-700">{dailyErrors.audits}</p> : null}
+                {!dailyLoading.audits && !dailyErrors.audits && !dailyAudits.length ? <p className="p-6 text-center text-sm text-slate-500">No ICNO ward audit records were found for this date.</p> : null}
               </div>
             </CardBody>
           </Card>
@@ -534,7 +613,12 @@ export function SisterDashboard() {
             <Card>
               <CardHeader title="Approved Infection Findings" description="ICNO-approved alerts included in the daily report." />
               <CardBody className="space-y-3">
-                {dailyAlerts.map((alert) => (
+                {dailyLoading.alerts ? <Skeleton className="h-28" /> : null}
+                {!dailyLoading.alerts && dailyErrors.alerts ? <p className="rounded-md border border-red-200 bg-red-50 p-6 text-sm text-red-700">{dailyErrors.alerts}</p> : null}
+                {!dailyLoading.alerts && !dailyErrors.alerts && !dailyAlerts.length && visibleAlerts.length ? (
+                  <p className="rounded-md border border-clinical-200 bg-clinical-50 p-3 text-xs font-semibold uppercase text-clinical-800">No findings for the selected date. Showing recent approved findings.</p>
+                ) : null}
+                {visibleAlerts.map((alert) => (
                   <article key={alert.alert_id} className="rounded-md border border-slate-200 p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
@@ -546,14 +630,19 @@ export function SisterDashboard() {
                     </div>
                   </article>
                 ))}
-                {!dailyAlerts.length ? <p className="rounded-md border border-dashed border-slate-300 p-6 text-sm text-slate-500">No ICNO-approved findings are recorded for this date.</p> : null}
+                {!dailyLoading.alerts && !dailyErrors.alerts && !visibleAlerts.length ? <p className="rounded-md border border-dashed border-slate-300 p-6 text-sm text-slate-500">No ICNO-approved findings are recorded yet.</p> : null}
               </CardBody>
             </Card>
 
             <Card>
               <CardHeader title="Daily Lab and Outbreak Signals" description="Lab results connected to the selected daily report." />
               <CardBody className="space-y-3">
-                {dailyLabResults.slice(0, 8).map((result) => (
+                {dailyLoading.lab ? <Skeleton className="h-28" /> : null}
+                {!dailyLoading.lab && dailyErrors.lab ? <p className="rounded-md border border-red-200 bg-red-50 p-6 text-sm text-red-700">{dailyErrors.lab}</p> : null}
+                {!dailyLoading.lab && !dailyErrors.lab && !dailyLabResults.length && visibleLabResults.length ? (
+                  <p className="rounded-md border border-clinical-200 bg-clinical-50 p-3 text-xs font-semibold uppercase text-clinical-800">No lab signals for the selected date. Showing recent lab and outbreak signals.</p>
+                ) : null}
+                {visibleLabResults.map((result) => (
                   <article key={result.result_id || `${result.ward_id}-${result.pathogen_name}-${result.result_date}`} className="rounded-md border border-slate-200 p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
@@ -566,7 +655,7 @@ export function SisterDashboard() {
                     </div>
                   </article>
                 ))}
-                {!dailyLabResults.length ? <p className="rounded-md border border-dashed border-slate-300 p-6 text-sm text-slate-500">No lab signals are recorded for this date.</p> : null}
+                {!dailyLoading.lab && !dailyErrors.lab && !visibleLabResults.length ? <p className="rounded-md border border-dashed border-slate-300 p-6 text-sm text-slate-500">No lab signals are recorded yet.</p> : null}
               </CardBody>
             </Card>
           </div>

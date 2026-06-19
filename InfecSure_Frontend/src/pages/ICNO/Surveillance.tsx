@@ -43,14 +43,14 @@ export function Surveillance() {
     }
 
     try {
-      setAlerts(await listAlerts());
+      setAlerts(await listAlerts(undefined, { limit: 40 }));
     } catch (error) {
       setAlerts([]);
       nextErrors.push(`Alerts request failed: ${apiErrorMessage(error)}`);
     }
 
     try {
-      setLabResults(await listLabResults());
+      setLabResults(await listLabResults(undefined, { limit: 40 }));
     } catch (error) {
       setLabResults([]);
       nextErrors.push(`Lab results request failed: ${apiErrorMessage(error)}`);

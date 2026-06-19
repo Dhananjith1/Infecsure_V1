@@ -20,6 +20,16 @@ export async function generateDengueReport(alertId: string) {
   return data;
 }
 
+export async function generateWeeklyDengueReport() {
+  const { data } = await api.post("/reports/dengue/weekly");
+  return data;
+}
+
+export async function dispatchReport(reportId: string, payload: { to_email: string; cc?: string[]; message?: string }) {
+  const { data } = await api.post(`/reports/dispatch/${reportId}`, payload);
+  return data;
+}
+
 export function reportDownloadUrl(downloadUrl: string) {
   const base = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
   return `${base}${downloadUrl}`;

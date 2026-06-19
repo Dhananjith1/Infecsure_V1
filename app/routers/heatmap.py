@@ -29,8 +29,8 @@ async def get_heatmap(current_user: TokenData = _ALL_AUTH):
     """
     try:
         wards = fs.list_wards()
-        all_lab_results = fs.list_lab_results(limit=500)
-        all_audits = fs.list_all_audits(limit=500)
+        all_lab_results = fs.list_lab_results(limit=100)
+        all_audits = fs.list_all_audits(limit=100)
     except Exception as exc:
         if fallback_data.is_quota_error(exc):
             heatmap = fallback_data.heatmap(public_mode=current_user.role == UserRole.STAFF.value)

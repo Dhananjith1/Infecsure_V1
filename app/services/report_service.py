@@ -279,7 +279,7 @@ def generate_executive_excel(
 
 # ─── Dengue PDF Report ────────────────────────────────────────────────────────
 
-def generate_dengue_pdf(alert: dict, lab_results: list[dict], generated_by: str) -> bytes:
+def generate_dengue_pdf(alert: dict, lab_results: list[dict], generated_by: str, audits: Optional[list[dict]] = None) -> bytes:
     """Generate a formatted Dengue Alert Report PDF for the Supervising Doctor."""
     # ── Lazy imports ───────────────────────────────────────────────────────
     try:
@@ -312,6 +312,34 @@ def generate_dengue_pdf(alert: dict, lab_results: list[dict], generated_by: str)
     story.append(Paragraph(f"Description: {alert.get('description', 'N/A')}", styles["Normal"]))
     if alert.get("icno_notes"):
         story.append(Paragraph(f"ICNO Notes: {alert['icno_notes']}", styles["Normal"]))
+    story.append(Spacer(1, 0.5*cm))
+
+    story.append(Paragraph("Related ICNO Ward Audits", styles["SectionHeader"]))
+    if audits:
+        audit_data = [["Ward", "Overall", "Hand Hygiene", "PPE", "Waste", "Environment", "Date"]]
+        for audit in audits[:20]:
+            audit_data.append([
+                audit.get("ward_id", "N/A"),
+                f"{float(audit.get('overall_compliance_score', 0) or 0):.1f}%",
+                f"{float(audit.get('hand_hygiene_score', 0) or 0):.1f}%",
+                f"{float(audit.get('ppe_score', 0) or 0):.1f}%",
+                f"{float(audit.get('waste_segregation_score', 0) or 0):.1f}%",
+                f"{float(audit.get('environmental_score', 0) or 0):.1f}%",
+                str(audit.get("created_at", audit.get("audit_date", "")))[:10],
+            ])
+        audit_table = Table(audit_data, colWidths=[3*cm, 2.2*cm, 2.5*cm, 2*cm, 2*cm, 2.5*cm, 2.5*cm])
+        audit_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#16213e")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ]))
+        story.append(audit_table)
+    else:
+        story.append(Paragraph("No related ICNO ward audits found for this period.", styles["Normal"]))
+
     story.append(Spacer(1, 0.5*cm))
 
     story.append(Paragraph("Related Lab Results", styles["SectionHeader"]))

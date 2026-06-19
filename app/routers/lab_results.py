@@ -182,6 +182,7 @@ async def scan_lab_slip(
 @router.get("/", summary="List all lab results")
 async def list_lab_results(
     ward_id: str = None,
+    limit: int = 50,
     current_user: TokenData = _ALL_AUTH,
 ):
     """
@@ -190,10 +191,11 @@ async def list_lab_results(
     Staff role receives masked data with no patient identifiers.
     """
     try:
-        results = fs.list_lab_results(ward_id=ward_id)
+        bounded_limit = min(max(limit, 1), 100)
+        results = fs.list_lab_results(ward_id=ward_id, limit=bounded_limit)
     except Exception as exc:
         if fallback_data.is_quota_error(exc):
-            results = [r for r in fallback_data.LAB_RESULTS if not ward_id or r.get("ward_id") == ward_id]
+            results = [r for r in fallback_data.LAB_RESULTS if not ward_id or r.get("ward_id") == ward_id][:bounded_limit]
         else:
             raise
     results = _only_own_lab_results(results, current_user)

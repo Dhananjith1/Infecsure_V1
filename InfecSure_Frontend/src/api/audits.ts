@@ -35,8 +35,12 @@ export async function getPriorityList() {
   return Array.isArray(data) ? data : data?.priorities ?? [];
 }
 
-export async function listAudits() {
-  const { data } = await api.get("/audits/");
+export async function listAudits(config?: { timeout?: number; limit?: number }) {
+  const { limit, ...axiosConfig } = config || {};
+  const { data } = await api.get("/audits/", {
+    ...axiosConfig,
+    params: limit ? { limit } : undefined
+  });
   return data;
 }
 

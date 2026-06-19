@@ -32,6 +32,7 @@ _ICNO_SISTER_DOCTOR = Depends(require_role(UserRole.ICNO, UserRole.SISTER, UserR
 @router.get("/", summary="List alerts")
 async def list_alerts(
     alert_status: str = None,
+    limit: int = 50,
     current_user: TokenData = _ALL_AUTH,
 ):
     """
@@ -43,6 +44,7 @@ async def list_alerts(
     - **Lab**: Not accessible (403)
     """
     role = current_user.role
+    bounded_limit = min(max(limit, 1), 100)
 
     if role == UserRole.STAFF.value:
         raise HTTPException(status_code=403, detail="Staff cannot access alerts.")
@@ -52,28 +54,28 @@ async def list_alerts(
     if role == UserRole.ICNO.value:
         # ICNO sees everything, can filter by status
         try:
-            alerts = fs.list_alerts(status=alert_status)
+            alerts = fs.list_alerts(status=alert_status, limit=bounded_limit)
         except Exception as exc:
             if fallback_data.is_quota_error(exc):
-                alerts = [a for a in fallback_data.ALERTS if not alert_status or a.get("status") == alert_status]
+                alerts = [a for a in fallback_data.ALERTS if not alert_status or a.get("status") == alert_status][:bounded_limit]
             else:
                 raise
     elif role == UserRole.SISTER.value:
         # Sister sees only approved
         try:
-            alerts = fs.list_alerts(status="approved")
+            alerts = fs.list_alerts(status="approved", limit=bounded_limit)
         except Exception as exc:
             if fallback_data.is_quota_error(exc):
-                alerts = [a for a in fallback_data.ALERTS if a.get("status") == "approved"]
+                alerts = [a for a in fallback_data.ALERTS if a.get("status") == "approved"][:bounded_limit]
             else:
                 raise
     elif role == UserRole.DOCTOR.value:
         # Doctor sees approved alerts targeting them
         try:
-            alerts = fs.list_alerts(status="approved")
+            alerts = fs.list_alerts(status="approved", limit=bounded_limit)
         except Exception as exc:
             if fallback_data.is_quota_error(exc):
-                alerts = [a for a in fallback_data.ALERTS if a.get("status") == "approved"]
+                alerts = [a for a in fallback_data.ALERTS if a.get("status") == "approved"][:bounded_limit]
             else:
                 raise
         alerts = [

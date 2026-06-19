@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import logging
 import smtplib
+from email import encoders
+from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Optional
@@ -63,6 +65,52 @@ def send_moh_notification(
 
     except Exception as e:
         logger.error(f"Failed to send email to {to_email}: {e}")
+        return False
+
+
+def send_authorized_report_email(
+    to_email: str,
+    subject: str,
+    body_html: str,
+    attachment_bytes: bytes,
+    attachment_filename: str,
+    cc: Optional[list[str]] = None,
+) -> bool:
+    """Send an authorized clinical report email with a PDF attachment."""
+    if not smtp_is_configured():
+        logger.warning("SMTP credentials not configured. Report email not sent.")
+        return False
+
+    try:
+        msg = MIMEMultipart()
+        msg["Subject"] = subject
+        msg["From"] = f"InfecSure System <{settings.smtp_user}>"
+        msg["To"] = to_email
+        if cc:
+            msg["Cc"] = ", ".join(cc)
+
+        plain_text = body_html.replace("<br>", "\n").replace("<p>", "\n").replace("</p>", "")
+        msg.attach(MIMEText(plain_text, "plain"))
+        msg.attach(MIMEText(body_html, "html"))
+
+        attachment = MIMEBase("application", "pdf")
+        attachment.set_payload(attachment_bytes)
+        encoders.encode_base64(attachment)
+        attachment.add_header("Content-Disposition", "attachment", filename=attachment_filename)
+        msg.attach(attachment)
+
+        with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(settings.smtp_user, settings.smtp_password)
+            recipients = [to_email] + (cc or [])
+            server.sendmail(settings.smtp_user, recipients, msg.as_string())
+
+        logger.info(f"Authorized report sent to {to_email}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to send authorized report to {to_email}: {e}")
         return False
 
 

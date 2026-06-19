@@ -1,9 +1,14 @@
 import { api } from "./client";
 import type { AlertItem } from "../types";
 
-export async function listAlerts(status?: string) {
+export async function listAlerts(status?: string, config?: { timeout?: number; limit?: number }) {
+  const { limit, ...axiosConfig } = config || {};
   const { data } = await api.get<AlertItem[]>("/alerts/", {
-    params: status ? { alert_status: status } : undefined
+    ...axiosConfig,
+    params: {
+      ...(status ? { alert_status: status } : {}),
+      ...(limit ? { limit } : {})
+    }
   });
   return data;
 }

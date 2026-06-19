@@ -118,7 +118,7 @@ export function LabDashboard() {
 
   async function refreshSubmissions() {
     try {
-      setSubmissions(await listLabResults());
+      setSubmissions(await listLabResults(undefined, { limit: 30 }));
     } catch {
       setSubmissions([]);
     }

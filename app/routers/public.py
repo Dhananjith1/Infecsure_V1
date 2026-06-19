@@ -28,7 +28,7 @@ async def public_heatmap():
     """
     try:
         wards = fs.list_wards()
-        approved_alerts = fs.list_alerts(status="approved", limit=200) + fs.list_alerts(status="dispatched", limit=200)
+        approved_alerts = fs.list_alerts(status="approved", limit=50) + fs.list_alerts(status="dispatched", limit=50)
     except Exception as exc:
         if fallback_data.is_quota_error(exc):
             return {"heatmap": fallback_data.heatmap(public_mode=True), "fallback_reason": "Firestore quota exceeded"}

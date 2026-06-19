@@ -334,13 +334,13 @@ def calculate_task_priority(ward_ids: Optional[list[str]] = None) -> list[dict[s
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=30)
     audits_by_ward: dict[str, list[dict[str, Any]]] = {}
-    for audit in fs.list_all_audits(limit=500):
+    for audit in fs.list_all_audits(limit=100):
         wid = audit.get("ward_id")
         if wid in ward_by_id:
             audits_by_ward.setdefault(wid, []).append(audit)
 
     lab_by_ward: dict[str, list[dict[str, Any]]] = {}
-    for result in fs.list_lab_results(limit=500):
+    for result in fs.list_lab_results(limit=100):
         wid = result.get("ward_id")
         if wid not in ward_by_id:
             continue
@@ -438,13 +438,26 @@ def find_root_cause_associations(
         return [{"error": "MLxtend / pandas not available"}]
 
     all_wards = fs.list_wards()
+    ward_ids = {ward["ward_id"] for ward in all_wards}
+    audits_by_ward: dict[str, list[dict[str, Any]]] = {}
+    for audit in fs.list_all_audits(limit=100):
+        wid = audit.get("ward_id")
+        if wid in ward_ids:
+            audits_by_ward.setdefault(wid, []).append(audit)
+
+    lab_by_ward: dict[str, list[dict[str, Any]]] = {}
+    for result in fs.list_lab_results(limit=100):
+        wid = result.get("ward_id")
+        if wid in ward_ids:
+            lab_by_ward.setdefault(wid, []).append(result)
+
     transactions = []
 
     for ward in all_wards:
         wid = ward["ward_id"]
         items = set()
 
-        audits = fs.list_audits_for_ward(wid, limit=10)
+        audits = audits_by_ward.get(wid, [])[-10:]
         for audit in audits:
             if audit.get("hand_hygiene_score", 100) < 70:
                 items.add("FAIL:hand_hygiene")
@@ -455,7 +468,7 @@ def find_root_cause_associations(
             if audit.get("environmental_score", 100) < 70:
                 items.add("FAIL:environmental")
 
-        lab_results = fs.list_lab_results(ward_id=wid, limit=50)
+        lab_results = lab_by_ward.get(wid, [])[-20:]
         for result in lab_results:
             pathogen_name = result.get("pathogen_name", "unknown")
             items.add(f"PATHOGEN:{pathogen_name.replace(' ', '_').upper()}")
@@ -546,7 +559,7 @@ def get_dashboard_summary() -> dict[str, Any]:
 
     avg_compliance = total_compliance / len(wards) if wards else 100.0
 
-    pending_alerts = fs.list_alerts(status="pending", limit=200)
+    pending_alerts = fs.list_alerts(status="pending", limit=50)
     recent_lab = fs.list_lab_results(limit=50)
     anomaly_count = sum(
         1 for r in recent_lab

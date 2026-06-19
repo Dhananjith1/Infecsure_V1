@@ -30,8 +30,15 @@ export async function createLabResult(payload: LabResultPayload) {
   return data;
 }
 
-export async function listLabResults(wardId?: string) {
-  const { data } = await api.get<LabResult[]>("/lab-results/", { params: wardId ? { ward_id: wardId } : undefined });
+export async function listLabResults(wardId?: string, config?: { timeout?: number; limit?: number }) {
+  const { limit, ...axiosConfig } = config || {};
+  const { data } = await api.get<LabResult[]>("/lab-results/", {
+    ...axiosConfig,
+    params: {
+      ...(wardId ? { ward_id: wardId } : {}),
+      ...(limit ? { limit } : {})
+    }
+  });
   return data;
 }
 
