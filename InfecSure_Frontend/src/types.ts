@@ -44,8 +44,13 @@ export type LabResult = {
   pathogen_id?: string;
   pathogen_name: string;
   specimen_type: string;
+  test_result?: "positive" | "negative" | string;
+  patient_ward_location?: string;
+  colony_count?: number;
+  notes?: string;
+  entered_by_uid?: string;
   result_date: string;
-  status?: "pending" | "approved";
+  status?: "pending" | "approved" | string;
   anomaly?: {
     is_anomaly: boolean;
     z_score: number;

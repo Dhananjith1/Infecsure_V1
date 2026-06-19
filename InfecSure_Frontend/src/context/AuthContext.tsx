@@ -14,6 +14,7 @@ type AuthContextValue = {
   loading: boolean;
   expiresAt: number | null;
   secondsRemaining: number;
+  sessionRefreshPending: boolean;
   login: (email: string, password: string) => Promise<UserRole>;
   logout: () => void;
   stayLoggedIn: () => Promise<void>;
@@ -37,6 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [expiresAt, setExpiresAt] = useState<number | null>(() => (sessionStorage.getItem(TOKEN_KEY) ? Date.now() + SESSION_MS : null));
   const [secondsRemaining, setSecondsRemaining] = useState(0);
   const [loading, setLoading] = useState(Boolean(sessionStorage.getItem(TOKEN_KEY)));
+  const [sessionRefreshPending, setSessionRefreshPending] = useState(false);
 
   const logout = useCallback(() => {
     sessionStorage.removeItem(TOKEN_KEY);
@@ -93,10 +95,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       const remaining = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
       setSecondsRemaining(remaining);
-      if (remaining === 0) logout();
+      if (remaining === 0 && !sessionRefreshPending) logout();
     }, 1000);
     return () => window.clearInterval(id);
-  }, [expiresAt, logout]);
+  }, [expiresAt, logout, sessionRefreshPending]);
 
   const login = useCallback(async (email: string, password: string) => {
     const response = await loginRequest(email, password);
@@ -120,11 +122,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       logout();
       return;
     }
-    const response = await refreshRequest(refreshToken);
-    sessionStorage.setItem(TOKEN_KEY, response.access_token);
-    sessionStorage.setItem(REFRESH_KEY, response.refresh_token);
-    setToken(response.access_token);
     setExpiresAt(Date.now() + SESSION_MS);
+    setSessionRefreshPending(true);
+    try {
+      const response = await refreshRequest(refreshToken);
+      sessionStorage.setItem(TOKEN_KEY, response.access_token);
+      sessionStorage.setItem(REFRESH_KEY, response.refresh_token);
+      setToken(response.access_token);
+      setExpiresAt(Date.now() + SESSION_MS);
+    } catch {
+      logout();
+    } finally {
+      setSessionRefreshPending(false);
+    }
   }, [logout]);
 
   const value = useMemo<AuthContextValue>(
@@ -136,11 +146,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading,
       expiresAt,
       secondsRemaining,
+      sessionRefreshPending,
       login,
       logout,
       stayLoggedIn
     }),
-    [expiresAt, loading, login, logout, secondsRemaining, stayLoggedIn, token, user]
+    [expiresAt, loading, login, logout, secondsRemaining, sessionRefreshPending, stayLoggedIn, token, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

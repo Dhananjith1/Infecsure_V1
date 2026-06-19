@@ -107,13 +107,13 @@ async def get_dashboard(_: TokenData = _ICNO_OR_SISTER):
         raise
 
 
-@router.get("/analytics/root-cause", summary="Apriori Root Cause Analysis (ICNO only)")
+@router.get("/analytics/root-cause", summary="Apriori Root Cause Analysis (ICNO / Sister)")
 async def get_root_cause(
     min_support: float = 0.1,
     min_confidence: float = 0.5,
     min_lift: float = 1.0,
     max_rules: int = 25,
-    _: TokenData = _ICNO_ONLY,
+    _: TokenData = _ICNO_OR_SISTER,
 ):
     """
     Run the Apriori algorithm to mine association rules between

@@ -6,7 +6,7 @@ import { Button } from "./Button";
 import { useSessionTimeout } from "../hooks/useSessionTimeout";
 
 export function Layout() {
-  const { secondsRemaining, showWarning, stayLoggedIn } = useSessionTimeout();
+  const { secondsRemaining, showWarning, sessionRefreshPending, stayLoggedIn } = useSessionTimeout();
   const minutes = Math.floor(secondsRemaining / 60);
   const seconds = secondsRemaining % 60;
 
@@ -29,7 +29,11 @@ export function Layout() {
         open={showWarning}
         title="Session ending soon"
         onClose={() => undefined}
-        footer={<Button onClick={stayLoggedIn}>Stay logged in</Button>}
+        footer={
+          <Button onClick={stayLoggedIn} disabled={sessionRefreshPending}>
+            {sessionRefreshPending ? "Refreshing..." : "Stay logged in"}
+          </Button>
+        }
       >
         Your 15-minute clinical session is close to expiring. Refresh your token before continuing patient-safety actions.
       </Modal>

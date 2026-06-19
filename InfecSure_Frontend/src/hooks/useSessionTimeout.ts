@@ -2,13 +2,14 @@ import { useMemo } from "react";
 import { useAuth } from "./useAuth";
 
 export function useSessionTimeout() {
-  const { secondsRemaining, stayLoggedIn } = useAuth();
+  const { secondsRemaining, sessionRefreshPending, stayLoggedIn } = useAuth();
   return useMemo(
     () => ({
       secondsRemaining,
       showWarning: secondsRemaining > 0 && secondsRemaining <= 120,
+      sessionRefreshPending,
       stayLoggedIn
     }),
-    [secondsRemaining, stayLoggedIn]
+    [secondsRemaining, sessionRefreshPending, stayLoggedIn]
   );
 }

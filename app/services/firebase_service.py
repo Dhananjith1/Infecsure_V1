@@ -352,7 +352,7 @@ def list_ocr_queue(status: str = "pending_review") -> list[dict]:
 # ─── Domain: Reports ─────────────────────────────────────────────────────────
 
 def create_report_record(data: dict) -> str:
-    report_id = _new_id()
+    report_id = data.get("report_id") or _new_id()
     data["report_id"] = report_id
     return create_document("reports", data, doc_id=report_id)
 

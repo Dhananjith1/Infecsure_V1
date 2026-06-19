@@ -20,7 +20,7 @@ from app.dependencies import require_role
 from app.models.auth import TokenData
 from app.models.report import ReportFormat, ReportRequest, ReportType
 from app.models.user import UserRole
-from app.services import firebase_service as fs, report_service
+from app.services import fallback_data, firebase_service as fs, report_service
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
@@ -32,10 +32,130 @@ _ICNO_OR_DOCTOR = Depends(require_role(UserRole.ICNO, UserRole.DOCTOR))
 _ICNO_ONLY = Depends(require_role(UserRole.ICNO))
 
 
+def _safe_list_wards() -> list[dict]:
+    try:
+        return fs.list_wards()
+    except Exception as exc:
+        if fallback_data.is_quota_error(exc):
+            return fallback_data.WARDS
+        raise
+
+
+def _safe_list_alerts(status: str | None = None) -> list[dict]:
+    try:
+        return fs.list_alerts(status=status)
+    except Exception as exc:
+        if fallback_data.is_quota_error(exc):
+            return [item for item in fallback_data.ALERTS if not status or item.get("status") == status]
+        raise
+
+
+def _safe_list_lab_results(ward_id: str | None = None, limit: int = 500) -> list[dict]:
+    try:
+        return fs.list_lab_results(ward_id=ward_id, limit=limit)
+    except Exception as exc:
+        if fallback_data.is_quota_error(exc):
+            return [
+                item for item in fallback_data.LAB_RESULTS
+                if not ward_id or item.get("ward_id") == ward_id
+            ][:limit]
+        raise
+
+
+def _safe_user_name(current_user: TokenData) -> str:
+    try:
+        user_doc = fs.get_user_by_uid(current_user.uid)
+    except Exception as exc:
+        if not fallback_data.is_quota_error(exc):
+            raise
+        user_doc = None
+    return user_doc.get("full_name", current_user.email) if user_doc else current_user.email
+
+
+def _safe_create_report_record(data: dict) -> None:
+    try:
+        fs.create_report_record(data)
+    except Exception as exc:
+        if not fallback_data.is_quota_error(exc):
+            raise
+
+
+def _find_report_record(report_id: str) -> dict | None:
+    try:
+        record = fs.get_report_record(report_id)
+    except Exception as exc:
+        if not fallback_data.is_quota_error(exc):
+            raise
+        record = None
+    if record:
+        return record
+    download_path = f"/reports/download/{report_id}"
+    try:
+        reports = fs.list_reports(limit=100)
+    except Exception as exc:
+        if not fallback_data.is_quota_error(exc):
+            raise
+        reports = []
+    for item in reports:
+        filename = str(item.get("filename") or "")
+        if item.get("download_url") == download_path or filename.startswith(report_id):
+            return item
+    local_matches = list(REPORTS_DIR.glob(f"{report_id}.*"))
+    if local_matches:
+        filepath = local_matches[0]
+        return {
+            "report_id": report_id,
+            "report_type": ReportType.EXECUTIVE_SUMMARY.value,
+            "format": ReportFormat.PDF.value if filepath.suffix.lower() == ".pdf" else ReportFormat.EXCEL.value,
+            "download_url": download_path,
+            "filename": filepath.name,
+        }
+    return None
+
+
+def _report_filepath(record: dict, report_id: str) -> Path:
+    filename = record.get("filename")
+    if not filename:
+        extension = "pdf" if record.get("format") == ReportFormat.PDF.value else "xlsx"
+        filename = f"{report_id}.{extension}"
+        record["filename"] = filename
+    return REPORTS_DIR / filename
+
+
+def _regenerate_executive_file(record: dict, filepath: Path, current_user: TokenData) -> None:
+    if record.get("report_type") not in {ReportType.EXECUTIVE_SUMMARY.value, "executive_summary"}:
+        return
+
+    wards = _safe_list_wards()
+    alerts = _safe_list_alerts(status="approved")
+    lab_results = _safe_list_lab_results(limit=500)
+    user_name = _safe_user_name(current_user)
+
+    if filepath.suffix.lower() == ".pdf":
+        file_bytes = report_service.generate_executive_pdf(
+            wards=wards,
+            alerts=alerts,
+            audit_summary=[],
+            generated_by=user_name,
+        )
+    else:
+        file_bytes = report_service.generate_executive_excel(
+            wards=wards,
+            alerts=alerts,
+            lab_results=lab_results,
+        )
+    filepath.write_bytes(file_bytes)
+
+
 @router.get("/", summary="List generated reports (Sister / ICNO)")
 async def list_reports(_: TokenData = _ICNO_OR_SISTER):
     """Returns metadata for all previously generated reports."""
-    return fs.list_reports()
+    try:
+        return fs.list_reports()
+    except Exception as exc:
+        if fallback_data.is_quota_error(exc):
+            return []
+        raise
 
 
 @router.post("/executive", status_code=status.HTTP_201_CREATED,
@@ -50,15 +170,15 @@ async def generate_executive(
     - Validated alerts summary
     - Lab results data
     """
-    wards = fs.list_wards()
-    alerts = fs.list_alerts(status="approved")
-    lab_results = fs.list_lab_results(limit=500)
+    wards = _safe_list_wards()
+    alerts = _safe_list_alerts(status="approved")
+    lab_results = _safe_list_lab_results(limit=500)
 
-    user_doc = fs.get_user_by_uid(current_user.uid)
-    user_name = user_doc.get("full_name", current_user.email) if user_doc else current_user.email
+    user_name = _safe_user_name(current_user)
 
     report_id = f"exec_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
-    filename = f"{report_id}.{body.format.value}"
+    extension = "pdf" if body.format == ReportFormat.PDF else "xlsx"
+    filename = f"{report_id}.{extension}"
     filepath = REPORTS_DIR / filename
 
     try:
@@ -82,8 +202,9 @@ async def generate_executive(
 
     filepath.write_bytes(file_bytes)
 
-    # Save report metadata to Firestore
-    fs.create_report_record({
+    # Save report metadata to Firestore when available. Local file download still
+    # works if Firestore quota is temporarily exhausted.
+    _safe_create_report_record({
         "report_id": report_id,
         "report_type": body.report_type.value,
         "format": body.format.value,
@@ -119,12 +240,9 @@ async def generate_dengue_report(
     if alert.get("status") != "approved":
         raise HTTPException(status_code=400, detail="Only approved alerts can generate dengue reports.")
 
-    # Find related lab results by ward
     ward_id = alert.get("ward_id")
-    lab_results = fs.list_lab_results(ward_id=ward_id, limit=50) if ward_id else []
-
-    user_doc = fs.get_user_by_uid(current_user.uid)
-    user_name = user_doc.get("full_name", current_user.email) if user_doc else current_user.email
+    lab_results = _safe_list_lab_results(ward_id=ward_id, limit=50) if ward_id else []
+    user_name = _safe_user_name(current_user)
 
     try:
         file_bytes = report_service.generate_dengue_pdf(alert, lab_results, user_name)
@@ -136,7 +254,7 @@ async def generate_dengue_report(
     filepath = REPORTS_DIR / filename
     filepath.write_bytes(file_bytes)
 
-    fs.create_report_record({
+    _safe_create_report_record({
         "report_id": report_id,
         "report_type": "dengue_alert",
         "format": "pdf",
@@ -149,7 +267,12 @@ async def generate_dengue_report(
     })
 
     # Notify doctor by email if ICNO triggers this
-    doctor_doc = fs.list_collection("users", filters=[("role", "==", "doctor")], limit=1)
+    try:
+        doctor_doc = fs.list_collection("users", filters=[("role", "==", "doctor")], limit=1)
+    except Exception as exc:
+        if not fallback_data.is_quota_error(exc):
+            raise
+        doctor_doc = []
     if doctor_doc and current_user.role == UserRole.ICNO.value:
         from app.services import email_service
         email_service.send_dengue_report_notification(doctor_doc[0]["email"], alert)
@@ -163,16 +286,22 @@ async def generate_dengue_report(
 
 
 @router.get("/download/{report_id}", summary="Download report file")
-async def download_report(report_id: str, _: TokenData = _ICNO_OR_SISTER):
+async def download_report(report_id: str, current_user: TokenData = _ICNO_OR_SISTER):
     """Download a previously generated PDF or Excel report file."""
-    record = fs.get_report_record(report_id)
+    record = _find_report_record(report_id)
     if not record:
         raise HTTPException(status_code=404, detail="Report not found.")
 
-    filename = record.get("filename")
-    filepath = REPORTS_DIR / filename
+    filepath = _report_filepath(record, report_id)
     if not filepath.exists():
-        raise HTTPException(status_code=404, detail="Report file not found on server.")
+        try:
+            _regenerate_executive_file(record, filepath, current_user)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+        if not filepath.exists():
+            raise HTTPException(status_code=404, detail="Report file not found on server.")
+
+    filename = filepath.name
 
     media_type = (
         "application/pdf"

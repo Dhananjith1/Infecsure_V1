@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel
 
@@ -34,6 +34,7 @@ class LabResultCreate(BaseModel):
     pathogen_name: str                  # Denormalized for fast reads
     specimen_type: SpecimenType
     result_date: datetime
+    test_result: Optional[str] = None
     colony_count: Optional[int] = None
     resistance_profile: Optional[list[str]] = []  # e.g. ["MRSA", "VRE"]
     antibiotic_sensitivity: Optional[dict] = {}   # {"ampicillin": "R", "ciprofloxacin": "S"}
@@ -45,6 +46,7 @@ class LabResult(LabResultCreate):
     result_id: str
     entered_by_uid: str
     entered_by_name: str
+    status: str = "pending"
     anomaly: Optional[AnomalyFlag] = None
     created_at: Optional[datetime] = None
 
@@ -56,5 +58,19 @@ class LabResultPublic(BaseModel):
     pathogen_name: str
     specimen_type: SpecimenType
     result_date: datetime
+    test_result: Optional[str] = None
+    status: str = "pending"
     anomaly: Optional[AnomalyFlag] = None
     created_at: Optional[datetime] = None
+
+
+class LabSlipOCRRequest(BaseModel):
+    image_base64: str
+
+
+class LabSlipOCRResponse(BaseModel):
+    raw_text: str
+    extracted_fields: dict[str, Any]
+    tokens: list[dict[str, Any]] = []
+    low_confidence_count: int = 0
+    engine: str = "easyocr"

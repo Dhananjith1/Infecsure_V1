@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Bell, FileText, MessageSquare, Send } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { doctorAcknowledge, doctorSignoff, listAlerts, listManagementInstructions, sendDoctorInstructions } from "../../api/alerts";
 import { apiErrorMessage } from "../../api/client";
 import { generateDengueReport, reportDownloadUrl } from "../../api/reports";
@@ -18,7 +19,9 @@ export function DoctorDashboard() {
   const [message, setMessage] = useState("");
   const [notes, setNotes] = useState("");
   const [ackMode, setAckMode] = useState<"instructions" | "doctor-acknowledge" | "acknowledge">("instructions");
+  const [searchParams] = useSearchParams();
   const { showToast } = useToast();
+  const activeTab = searchParams.get("tab") === "instructions" ? "instructions" : "alerts";
 
   useEffect(() => {
     listAlerts("approved").then(setAlerts).catch(() => setAlerts([]));
@@ -60,7 +63,7 @@ export function DoctorDashboard() {
         <p className="mt-1 text-sm text-slate-600">Only ICNO-approved clinical alerts appear here.</p>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+      {activeTab === "alerts" ? (
         <Card>
           <CardHeader title="Clinical Alerts / Notifications" description="Formatted from validated findings, never raw AI output." />
           <CardBody className="space-y-4">
@@ -83,9 +86,11 @@ export function DoctorDashboard() {
             ))}
           </CardBody>
         </Card>
+      ) : null}
 
+      {activeTab === "instructions" ? (
         <Card>
-          <CardHeader title="Instruction Log" />
+          <CardHeader title="Digital Management Instructions" description="Ward-linked clinical instructions issued after reviewing confirmed reports." />
           <CardBody className="space-y-3">
             {!instructions.length ? <p className="text-sm text-slate-500">No instructions sent yet.</p> : null}
             {instructions.slice(0, 8).map((instruction, index) => (
@@ -99,7 +104,7 @@ export function DoctorDashboard() {
             ))}
           </CardBody>
         </Card>
-      </div>
+      ) : null}
 
       <Modal
         open={Boolean(selected)}

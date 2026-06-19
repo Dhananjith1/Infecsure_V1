@@ -1,0 +1,1768 @@
+{
+  "_type": "Project",
+  "_id": "infecsure_project",
+  "name": "InfecSure Firestore ER Diagram",
+  "ownedElements": [
+    {
+      "_type": "UMLModel",
+      "_id": "model_infecsure",
+      "_parent": {
+        "$ref": "infecsure_project"
+      },
+      "name": "InfecSure Firestore Logical Model",
+      "ownedElements": [
+        {
+          "_type": "UMLClassDiagram",
+          "_id": "diagram_er",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "Firestore Logical ER Diagram",
+          "ownedViews": [
+            {
+              "_type": "UMLClassView",
+              "_id": "view_users",
+              "_parent": {
+                "$ref": "diagram_er"
+              },
+              "model": {
+                "$ref": "class_users"
+              },
+              "x": 40,
+              "y": 100,
+              "width": 220,
+              "height": 190
+            },
+            {
+              "_type": "UMLClassView",
+              "_id": "view_wards",
+              "_parent": {
+                "$ref": "diagram_er"
+              },
+              "model": {
+                "$ref": "class_wards"
+              },
+              "x": 360,
+              "y": 100,
+              "width": 240,
+              "height": 245
+            },
+            {
+              "_type": "UMLClassView",
+              "_id": "view_pathogens",
+              "_parent": {
+                "$ref": "diagram_er"
+              },
+              "model": {
+                "$ref": "class_pathogens"
+              },
+              "x": 700,
+              "y": 100,
+              "width": 250,
+              "height": 190
+            },
+            {
+              "_type": "UMLClassView",
+              "_id": "view_pathogen_stats",
+              "_parent": {
+                "$ref": "diagram_er"
+              },
+              "model": {
+                "$ref": "class_pathogen_stats"
+              },
+              "x": 1040,
+              "y": 100,
+              "width": 250,
+              "height": 145
+            },
+            {
+              "_type": "UMLClassView",
+              "_id": "view_audits",
+              "_parent": {
+                "$ref": "diagram_er"
+              },
+              "model": {
+                "$ref": "class_audits"
+              },
+              "x": 40,
+              "y": 430,
+              "width": 260,
+              "height": 270
+            },
+            {
+              "_type": "UMLClassView",
+              "_id": "view_lab_results",
+              "_parent": {
+                "$ref": "diagram_er"
+              },
+              "model": {
+                "$ref": "class_lab_results"
+              },
+              "x": 380,
+              "y": 430,
+              "width": 270,
+              "height": 270
+            },
+            {
+              "_type": "UMLClassView",
+              "_id": "view_alerts",
+              "_parent": {
+                "$ref": "diagram_er"
+              },
+              "model": {
+                "$ref": "class_alerts"
+              },
+              "x": 730,
+              "y": 430,
+              "width": 270,
+              "height": 270
+            },
+            {
+              "_type": "UMLClassView",
+              "_id": "view_management_instructions",
+              "_parent": {
+                "$ref": "diagram_er"
+              },
+              "model": {
+                "$ref": "class_management_instructions"
+              },
+              "x": 1080,
+              "y": 430,
+              "width": 300,
+              "height": 190
+            },
+            {
+              "_type": "UMLClassView",
+              "_id": "view_ocr_queue",
+              "_parent": {
+                "$ref": "diagram_er"
+              },
+              "model": {
+                "$ref": "class_ocr_queue"
+              },
+              "x": 40,
+              "y": 820,
+              "width": 260,
+              "height": 220
+            },
+            {
+              "_type": "UMLClassView",
+              "_id": "view_reports",
+              "_parent": {
+                "$ref": "diagram_er"
+              },
+              "model": {
+                "$ref": "class_reports"
+              },
+              "x": 380,
+              "y": 820,
+              "width": 270,
+              "height": 200
+            },
+            {
+              "_type": "UMLClassView",
+              "_id": "view_notices",
+              "_parent": {
+                "$ref": "diagram_er"
+              },
+              "model": {
+                "$ref": "class_notices"
+              },
+              "x": 730,
+              "y": 820,
+              "width": 270,
+              "height": 180
+            },
+            {
+              "_type": "UMLClassView",
+              "_id": "view_moh_notifications",
+              "_parent": {
+                "$ref": "diagram_er"
+              },
+              "model": {
+                "$ref": "class_moh_notifications"
+              },
+              "x": 1080,
+              "y": 820,
+              "width": 300,
+              "height": 200
+            }
+          ]
+        },
+        {
+          "_type": "UMLClass",
+          "_id": "class_users",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "USERS",
+          "attributes": [
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_users_uid",
+              "_parent": {
+                "$ref": "class_users"
+              },
+              "name": "uid",
+              "type": "string",
+              "stereotype": "PK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_users_email",
+              "_parent": {
+                "$ref": "class_users"
+              },
+              "name": "email",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_users_full_name",
+              "_parent": {
+                "$ref": "class_users"
+              },
+              "name": "full_name",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_users_role",
+              "_parent": {
+                "$ref": "class_users"
+              },
+              "name": "role",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_users_is_active",
+              "_parent": {
+                "$ref": "class_users"
+              },
+              "name": "is_active",
+              "type": "boolean"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_users_created_at",
+              "_parent": {
+                "$ref": "class_users"
+              },
+              "name": "created_at",
+              "type": "datetime"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_users_updated_at",
+              "_parent": {
+                "$ref": "class_users"
+              },
+              "name": "updated_at",
+              "type": "datetime"
+            }
+          ]
+        },
+        {
+          "_type": "UMLClass",
+          "_id": "class_wards",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "WARDS",
+          "attributes": [
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_wards_ward_id",
+              "_parent": {
+                "$ref": "class_wards"
+              },
+              "name": "ward_id",
+              "type": "string",
+              "stereotype": "PK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_wards_name",
+              "_parent": {
+                "$ref": "class_wards"
+              },
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_wards_ward_type",
+              "_parent": {
+                "$ref": "class_wards"
+              },
+              "name": "ward_type",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_wards_bed_count",
+              "_parent": {
+                "$ref": "class_wards"
+              },
+              "name": "bed_count",
+              "type": "integer"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_wards_floor",
+              "_parent": {
+                "$ref": "class_wards"
+              },
+              "name": "floor",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_wards_risk_level",
+              "_parent": {
+                "$ref": "class_wards"
+              },
+              "name": "risk_level",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_wards_risk_score",
+              "_parent": {
+                "$ref": "class_wards"
+              },
+              "name": "risk_score",
+              "type": "float"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_wards_compliance_score",
+              "_parent": {
+                "$ref": "class_wards"
+              },
+              "name": "compliance_score",
+              "type": "float"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_wards_last_audit_at",
+              "_parent": {
+                "$ref": "class_wards"
+              },
+              "name": "last_audit_at",
+              "type": "datetime"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_wards_created_at",
+              "_parent": {
+                "$ref": "class_wards"
+              },
+              "name": "created_at",
+              "type": "datetime"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_wards_updated_at",
+              "_parent": {
+                "$ref": "class_wards"
+              },
+              "name": "updated_at",
+              "type": "datetime"
+            }
+          ]
+        },
+        {
+          "_type": "UMLClass",
+          "_id": "class_audits",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "AUDITS",
+          "attributes": [
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_audits_audit_id",
+              "_parent": {
+                "$ref": "class_audits"
+              },
+              "name": "audit_id",
+              "type": "string",
+              "stereotype": "PK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_audits_ward_id",
+              "_parent": {
+                "$ref": "class_audits"
+              },
+              "name": "ward_id",
+              "type": "string",
+              "stereotype": "FK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_audits_conducted_by_uid",
+              "_parent": {
+                "$ref": "class_audits"
+              },
+              "name": "conducted_by_uid",
+              "type": "string",
+              "stereotype": "FK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_audits_overall_compliance_score",
+              "_parent": {
+                "$ref": "class_audits"
+              },
+              "name": "overall_compliance_score",
+              "type": "float"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_audits_remarks",
+              "_parent": {
+                "$ref": "class_audits"
+              },
+              "name": "remarks",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_audits_source",
+              "_parent": {
+                "$ref": "class_audits"
+              },
+              "name": "source",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_audits_ocr_scan_id",
+              "_parent": {
+                "$ref": "class_audits"
+              },
+              "name": "ocr_scan_id",
+              "type": "string",
+              "stereotype": "FK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_audits_created_at",
+              "_parent": {
+                "$ref": "class_audits"
+              },
+              "name": "created_at",
+              "type": "datetime"
+            }
+          ]
+        },
+        {
+          "_type": "UMLClass",
+          "_id": "class_lab_results",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "LAB_RESULTS",
+          "attributes": [
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_lab_result_id",
+              "_parent": {
+                "$ref": "class_lab_results"
+              },
+              "name": "result_id",
+              "type": "string",
+              "stereotype": "PK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_lab_ward_id",
+              "_parent": {
+                "$ref": "class_lab_results"
+              },
+              "name": "ward_id",
+              "type": "string",
+              "stereotype": "FK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_lab_pathogen_id",
+              "_parent": {
+                "$ref": "class_lab_results"
+              },
+              "name": "pathogen_id",
+              "type": "string",
+              "stereotype": "FK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_lab_pathogen_name",
+              "_parent": {
+                "$ref": "class_lab_results"
+              },
+              "name": "pathogen_name",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_lab_specimen_type",
+              "_parent": {
+                "$ref": "class_lab_results"
+              },
+              "name": "specimen_type",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_lab_result_date",
+              "_parent": {
+                "$ref": "class_lab_results"
+              },
+              "name": "result_date",
+              "type": "datetime"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_lab_colony_count",
+              "_parent": {
+                "$ref": "class_lab_results"
+              },
+              "name": "colony_count",
+              "type": "integer"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_lab_entered_by_uid",
+              "_parent": {
+                "$ref": "class_lab_results"
+              },
+              "name": "entered_by_uid",
+              "type": "string",
+              "stereotype": "FK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_lab_anomaly",
+              "_parent": {
+                "$ref": "class_lab_results"
+              },
+              "name": "anomaly",
+              "type": "object"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_lab_ocr_scan_id",
+              "_parent": {
+                "$ref": "class_lab_results"
+              },
+              "name": "ocr_scan_id",
+              "type": "string",
+              "stereotype": "FK"
+            }
+          ]
+        },
+        {
+          "_type": "UMLClass",
+          "_id": "class_pathogens",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "PATHOGENS",
+          "attributes": [
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_pathogens_pathogen_id",
+              "_parent": {
+                "$ref": "class_pathogens"
+              },
+              "name": "pathogen_id",
+              "type": "string",
+              "stereotype": "PK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_pathogens_name",
+              "_parent": {
+                "$ref": "class_pathogens"
+              },
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_pathogens_category",
+              "_parent": {
+                "$ref": "class_pathogens"
+              },
+              "name": "category",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_pathogens_risk_level",
+              "_parent": {
+                "$ref": "class_pathogens"
+              },
+              "name": "risk_level",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_pathogens_clinical_risk_class",
+              "_parent": {
+                "$ref": "class_pathogens"
+              },
+              "name": "clinical_risk_class",
+              "type": "integer"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_pathogens_description",
+              "_parent": {
+                "$ref": "class_pathogens"
+              },
+              "name": "description",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "_type": "UMLClass",
+          "_id": "class_pathogen_stats",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "PATHOGEN_STATS",
+          "attributes": [
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_stats_pathogen_id",
+              "_parent": {
+                "$ref": "class_pathogen_stats"
+              },
+              "name": "pathogen_id",
+              "type": "string",
+              "stereotype": "PK, FK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_stats_mean",
+              "_parent": {
+                "$ref": "class_pathogen_stats"
+              },
+              "name": "mean",
+              "type": "float"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_stats_std",
+              "_parent": {
+                "$ref": "class_pathogen_stats"
+              },
+              "name": "std",
+              "type": "float"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_stats_count",
+              "_parent": {
+                "$ref": "class_pathogen_stats"
+              },
+              "name": "count",
+              "type": "integer"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_stats_updated_at",
+              "_parent": {
+                "$ref": "class_pathogen_stats"
+              },
+              "name": "updated_at",
+              "type": "datetime"
+            }
+          ]
+        },
+        {
+          "_type": "UMLClass",
+          "_id": "class_alerts",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "ALERTS",
+          "attributes": [
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_alerts_alert_id",
+              "_parent": {
+                "$ref": "class_alerts"
+              },
+              "name": "alert_id",
+              "type": "string",
+              "stereotype": "PK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_alerts_alert_type",
+              "_parent": {
+                "$ref": "class_alerts"
+              },
+              "name": "alert_type",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_alerts_ward_id",
+              "_parent": {
+                "$ref": "class_alerts"
+              },
+              "name": "ward_id",
+              "type": "string",
+              "stereotype": "FK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_alerts_title",
+              "_parent": {
+                "$ref": "class_alerts"
+              },
+              "name": "title",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_alerts_severity",
+              "_parent": {
+                "$ref": "class_alerts"
+              },
+              "name": "severity",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_alerts_status",
+              "_parent": {
+                "$ref": "class_alerts"
+              },
+              "name": "status",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_alerts_source_data",
+              "_parent": {
+                "$ref": "class_alerts"
+              },
+              "name": "source_data",
+              "type": "object"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_alerts_validated_by_uid",
+              "_parent": {
+                "$ref": "class_alerts"
+              },
+              "name": "validated_by_uid",
+              "type": "string",
+              "stereotype": "FK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_alerts_latest_instruction_id",
+              "_parent": {
+                "$ref": "class_alerts"
+              },
+              "name": "latest_instruction_id",
+              "type": "string",
+              "stereotype": "FK"
+            }
+          ]
+        },
+        {
+          "_type": "UMLClass",
+          "_id": "class_management_instructions",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "MANAGEMENT_INSTRUCTIONS",
+          "attributes": [
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_instr_instruction_id",
+              "_parent": {
+                "$ref": "class_management_instructions"
+              },
+              "name": "instruction_id",
+              "type": "string",
+              "stereotype": "PK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_instr_alert_id",
+              "_parent": {
+                "$ref": "class_management_instructions"
+              },
+              "name": "alert_id",
+              "type": "string",
+              "stereotype": "FK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_instr_doctor_uid",
+              "_parent": {
+                "$ref": "class_management_instructions"
+              },
+              "name": "doctor_uid",
+              "type": "string",
+              "stereotype": "FK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_instr_doctor_name",
+              "_parent": {
+                "$ref": "class_management_instructions"
+              },
+              "name": "doctor_name",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_instr_management_instructions",
+              "_parent": {
+                "$ref": "class_management_instructions"
+              },
+              "name": "management_instructions",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_instr_follow_up_required",
+              "_parent": {
+                "$ref": "class_management_instructions"
+              },
+              "name": "follow_up_required",
+              "type": "boolean"
+            }
+          ]
+        },
+        {
+          "_type": "UMLClass",
+          "_id": "class_ocr_queue",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "OCR_QUEUE",
+          "attributes": [
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_ocr_scan_id",
+              "_parent": {
+                "$ref": "class_ocr_queue"
+              },
+              "name": "scan_id",
+              "type": "string",
+              "stereotype": "PK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_ocr_form_type",
+              "_parent": {
+                "$ref": "class_ocr_queue"
+              },
+              "name": "form_type",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_ocr_reference_id",
+              "_parent": {
+                "$ref": "class_ocr_queue"
+              },
+              "name": "reference_id",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_ocr_raw_text",
+              "_parent": {
+                "$ref": "class_ocr_queue"
+              },
+              "name": "raw_text",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_ocr_extracted_fields",
+              "_parent": {
+                "$ref": "class_ocr_queue"
+              },
+              "name": "extracted_fields",
+              "type": "object"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_ocr_created_by_uid",
+              "_parent": {
+                "$ref": "class_ocr_queue"
+              },
+              "name": "created_by_uid",
+              "type": "string",
+              "stereotype": "FK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_ocr_status",
+              "_parent": {
+                "$ref": "class_ocr_queue"
+              },
+              "name": "status",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "_type": "UMLClass",
+          "_id": "class_reports",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "REPORTS",
+          "attributes": [
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_reports_report_id",
+              "_parent": {
+                "$ref": "class_reports"
+              },
+              "name": "report_id",
+              "type": "string",
+              "stereotype": "PK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_reports_report_type",
+              "_parent": {
+                "$ref": "class_reports"
+              },
+              "name": "report_type",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_reports_format",
+              "_parent": {
+                "$ref": "class_reports"
+              },
+              "name": "format",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_reports_download_url",
+              "_parent": {
+                "$ref": "class_reports"
+              },
+              "name": "download_url",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_reports_generated_by_uid",
+              "_parent": {
+                "$ref": "class_reports"
+              },
+              "name": "generated_by_uid",
+              "type": "string",
+              "stereotype": "FK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_reports_linked_alert_id",
+              "_parent": {
+                "$ref": "class_reports"
+              },
+              "name": "linked_alert_id",
+              "type": "string",
+              "stereotype": "FK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_reports_filename",
+              "_parent": {
+                "$ref": "class_reports"
+              },
+              "name": "filename",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "_type": "UMLClass",
+          "_id": "class_notices",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "NOTICES",
+          "attributes": [
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_notices_notice_id",
+              "_parent": {
+                "$ref": "class_notices"
+              },
+              "name": "notice_id",
+              "type": "string",
+              "stereotype": "PK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_notices_title",
+              "_parent": {
+                "$ref": "class_notices"
+              },
+              "name": "title",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_notices_body",
+              "_parent": {
+                "$ref": "class_notices"
+              },
+              "name": "body",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_notices_posted_by_uid",
+              "_parent": {
+                "$ref": "class_notices"
+              },
+              "name": "posted_by_uid",
+              "type": "string",
+              "stereotype": "FK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_notices_expires_at",
+              "_parent": {
+                "$ref": "class_notices"
+              },
+              "name": "expires_at",
+              "type": "datetime"
+            }
+          ]
+        },
+        {
+          "_type": "UMLClass",
+          "_id": "class_moh_notifications",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "MOH_NOTIFICATIONS",
+          "attributes": [
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_moh_notification_id",
+              "_parent": {
+                "$ref": "class_moh_notifications"
+              },
+              "name": "notification_id",
+              "type": "string",
+              "stereotype": "PK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_moh_ward_id",
+              "_parent": {
+                "$ref": "class_moh_notifications"
+              },
+              "name": "ward_id",
+              "type": "string",
+              "stereotype": "FK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_moh_ocr_scan_id",
+              "_parent": {
+                "$ref": "class_moh_notifications"
+              },
+              "name": "ocr_scan_id",
+              "type": "string",
+              "stereotype": "FK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_moh_committed_by_uid",
+              "_parent": {
+                "$ref": "class_moh_notifications"
+              },
+              "name": "committed_by_uid",
+              "type": "string",
+              "stereotype": "FK"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_moh_disease",
+              "_parent": {
+                "$ref": "class_moh_notifications"
+              },
+              "name": "disease",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_moh_severity",
+              "_parent": {
+                "$ref": "class_moh_notifications"
+              },
+              "name": "severity",
+              "type": "string"
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_moh_notes",
+              "_parent": {
+                "$ref": "class_moh_notifications"
+              },
+              "name": "notes",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "_type": "UMLAssociation",
+          "_id": "assoc_users_audits",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "conducts",
+          "end1": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_users_audits_end1",
+            "_parent": {
+              "$ref": "assoc_users_audits"
+            },
+            "reference": {
+              "$ref": "class_users"
+            },
+            "multiplicity": "1"
+          },
+          "end2": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_users_audits_end2",
+            "_parent": {
+              "$ref": "assoc_users_audits"
+            },
+            "reference": {
+              "$ref": "class_audits"
+            },
+            "multiplicity": "0..*"
+          }
+        },
+        {
+          "_type": "UMLAssociation",
+          "_id": "assoc_users_lab_results",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "enters",
+          "end1": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_users_lab_results_end1",
+            "_parent": {
+              "$ref": "assoc_users_lab_results"
+            },
+            "reference": {
+              "$ref": "class_users"
+            },
+            "multiplicity": "1"
+          },
+          "end2": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_users_lab_results_end2",
+            "_parent": {
+              "$ref": "assoc_users_lab_results"
+            },
+            "reference": {
+              "$ref": "class_lab_results"
+            },
+            "multiplicity": "0..*"
+          }
+        },
+        {
+          "_type": "UMLAssociation",
+          "_id": "assoc_users_alerts",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "validates",
+          "end1": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_users_alerts_end1",
+            "_parent": {
+              "$ref": "assoc_users_alerts"
+            },
+            "reference": {
+              "$ref": "class_users"
+            },
+            "multiplicity": "1"
+          },
+          "end2": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_users_alerts_end2",
+            "_parent": {
+              "$ref": "assoc_users_alerts"
+            },
+            "reference": {
+              "$ref": "class_alerts"
+            },
+            "multiplicity": "0..*"
+          }
+        },
+        {
+          "_type": "UMLAssociation",
+          "_id": "assoc_users_management_instructions",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "writes",
+          "end1": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_users_management_instructions_end1",
+            "_parent": {
+              "$ref": "assoc_users_management_instructions"
+            },
+            "reference": {
+              "$ref": "class_users"
+            },
+            "multiplicity": "1"
+          },
+          "end2": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_users_management_instructions_end2",
+            "_parent": {
+              "$ref": "assoc_users_management_instructions"
+            },
+            "reference": {
+              "$ref": "class_management_instructions"
+            },
+            "multiplicity": "0..*"
+          }
+        },
+        {
+          "_type": "UMLAssociation",
+          "_id": "assoc_users_ocr_queue",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "creates",
+          "end1": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_users_ocr_queue_end1",
+            "_parent": {
+              "$ref": "assoc_users_ocr_queue"
+            },
+            "reference": {
+              "$ref": "class_users"
+            },
+            "multiplicity": "1"
+          },
+          "end2": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_users_ocr_queue_end2",
+            "_parent": {
+              "$ref": "assoc_users_ocr_queue"
+            },
+            "reference": {
+              "$ref": "class_ocr_queue"
+            },
+            "multiplicity": "0..*"
+          }
+        },
+        {
+          "_type": "UMLAssociation",
+          "_id": "assoc_users_reports",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "generates",
+          "end1": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_users_reports_end1",
+            "_parent": {
+              "$ref": "assoc_users_reports"
+            },
+            "reference": {
+              "$ref": "class_users"
+            },
+            "multiplicity": "1"
+          },
+          "end2": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_users_reports_end2",
+            "_parent": {
+              "$ref": "assoc_users_reports"
+            },
+            "reference": {
+              "$ref": "class_reports"
+            },
+            "multiplicity": "0..*"
+          }
+        },
+        {
+          "_type": "UMLAssociation",
+          "_id": "assoc_users_notices",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "posts",
+          "end1": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_users_notices_end1",
+            "_parent": {
+              "$ref": "assoc_users_notices"
+            },
+            "reference": {
+              "$ref": "class_users"
+            },
+            "multiplicity": "1"
+          },
+          "end2": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_users_notices_end2",
+            "_parent": {
+              "$ref": "assoc_users_notices"
+            },
+            "reference": {
+              "$ref": "class_notices"
+            },
+            "multiplicity": "0..*"
+          }
+        },
+        {
+          "_type": "UMLAssociation",
+          "_id": "assoc_users_moh_notifications",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "commits",
+          "end1": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_users_moh_notifications_end1",
+            "_parent": {
+              "$ref": "assoc_users_moh_notifications"
+            },
+            "reference": {
+              "$ref": "class_users"
+            },
+            "multiplicity": "1"
+          },
+          "end2": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_users_moh_notifications_end2",
+            "_parent": {
+              "$ref": "assoc_users_moh_notifications"
+            },
+            "reference": {
+              "$ref": "class_moh_notifications"
+            },
+            "multiplicity": "0..*"
+          }
+        },
+        {
+          "_type": "UMLAssociation",
+          "_id": "assoc_wards_audits",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "has",
+          "end1": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_wards_audits_end1",
+            "_parent": {
+              "$ref": "assoc_wards_audits"
+            },
+            "reference": {
+              "$ref": "class_wards"
+            },
+            "multiplicity": "1"
+          },
+          "end2": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_wards_audits_end2",
+            "_parent": {
+              "$ref": "assoc_wards_audits"
+            },
+            "reference": {
+              "$ref": "class_audits"
+            },
+            "multiplicity": "0..*"
+          }
+        },
+        {
+          "_type": "UMLAssociation",
+          "_id": "assoc_wards_lab_results",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "has",
+          "end1": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_wards_lab_results_end1",
+            "_parent": {
+              "$ref": "assoc_wards_lab_results"
+            },
+            "reference": {
+              "$ref": "class_wards"
+            },
+            "multiplicity": "1"
+          },
+          "end2": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_wards_lab_results_end2",
+            "_parent": {
+              "$ref": "assoc_wards_lab_results"
+            },
+            "reference": {
+              "$ref": "class_lab_results"
+            },
+            "multiplicity": "0..*"
+          }
+        },
+        {
+          "_type": "UMLAssociation",
+          "_id": "assoc_wards_alerts",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "receives",
+          "end1": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_wards_alerts_end1",
+            "_parent": {
+              "$ref": "assoc_wards_alerts"
+            },
+            "reference": {
+              "$ref": "class_wards"
+            },
+            "multiplicity": "1"
+          },
+          "end2": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_wards_alerts_end2",
+            "_parent": {
+              "$ref": "assoc_wards_alerts"
+            },
+            "reference": {
+              "$ref": "class_alerts"
+            },
+            "multiplicity": "0..*"
+          }
+        },
+        {
+          "_type": "UMLAssociation",
+          "_id": "assoc_wards_moh_notifications",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "linked_to",
+          "end1": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_wards_moh_notifications_end1",
+            "_parent": {
+              "$ref": "assoc_wards_moh_notifications"
+            },
+            "reference": {
+              "$ref": "class_wards"
+            },
+            "multiplicity": "1"
+          },
+          "end2": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_wards_moh_notifications_end2",
+            "_parent": {
+              "$ref": "assoc_wards_moh_notifications"
+            },
+            "reference": {
+              "$ref": "class_moh_notifications"
+            },
+            "multiplicity": "0..*"
+          }
+        },
+        {
+          "_type": "UMLAssociation",
+          "_id": "assoc_pathogens_lab_results",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "appears_in",
+          "end1": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_pathogens_lab_results_end1",
+            "_parent": {
+              "$ref": "assoc_pathogens_lab_results"
+            },
+            "reference": {
+              "$ref": "class_pathogens"
+            },
+            "multiplicity": "1"
+          },
+          "end2": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_pathogens_lab_results_end2",
+            "_parent": {
+              "$ref": "assoc_pathogens_lab_results"
+            },
+            "reference": {
+              "$ref": "class_lab_results"
+            },
+            "multiplicity": "0..*"
+          }
+        },
+        {
+          "_type": "UMLAssociation",
+          "_id": "assoc_pathogens_pathogen_stats",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "has_stats",
+          "end1": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_pathogens_pathogen_stats_end1",
+            "_parent": {
+              "$ref": "assoc_pathogens_pathogen_stats"
+            },
+            "reference": {
+              "$ref": "class_pathogens"
+            },
+            "multiplicity": "1"
+          },
+          "end2": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_pathogens_pathogen_stats_end2",
+            "_parent": {
+              "$ref": "assoc_pathogens_pathogen_stats"
+            },
+            "reference": {
+              "$ref": "class_pathogen_stats"
+            },
+            "multiplicity": "1"
+          }
+        },
+        {
+          "_type": "UMLAssociation",
+          "_id": "assoc_audits_alerts",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "may_trigger",
+          "end1": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_audits_alerts_end1",
+            "_parent": {
+              "$ref": "assoc_audits_alerts"
+            },
+            "reference": {
+              "$ref": "class_audits"
+            },
+            "multiplicity": "0..1"
+          },
+          "end2": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_audits_alerts_end2",
+            "_parent": {
+              "$ref": "assoc_audits_alerts"
+            },
+            "reference": {
+              "$ref": "class_alerts"
+            },
+            "multiplicity": "0..*"
+          }
+        },
+        {
+          "_type": "UMLAssociation",
+          "_id": "assoc_lab_results_alerts",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "may_trigger",
+          "end1": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_lab_results_alerts_end1",
+            "_parent": {
+              "$ref": "assoc_lab_results_alerts"
+            },
+            "reference": {
+              "$ref": "class_lab_results"
+            },
+            "multiplicity": "0..1"
+          },
+          "end2": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_lab_results_alerts_end2",
+            "_parent": {
+              "$ref": "assoc_lab_results_alerts"
+            },
+            "reference": {
+              "$ref": "class_alerts"
+            },
+            "multiplicity": "0..*"
+          }
+        },
+        {
+          "_type": "UMLAssociation",
+          "_id": "assoc_alerts_management_instructions",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "has",
+          "end1": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_alerts_management_instructions_end1",
+            "_parent": {
+              "$ref": "assoc_alerts_management_instructions"
+            },
+            "reference": {
+              "$ref": "class_alerts"
+            },
+            "multiplicity": "1"
+          },
+          "end2": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_alerts_management_instructions_end2",
+            "_parent": {
+              "$ref": "assoc_alerts_management_instructions"
+            },
+            "reference": {
+              "$ref": "class_management_instructions"
+            },
+            "multiplicity": "0..*"
+          }
+        },
+        {
+          "_type": "UMLAssociation",
+          "_id": "assoc_alerts_reports",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "may_generate",
+          "end1": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_alerts_reports_end1",
+            "_parent": {
+              "$ref": "assoc_alerts_reports"
+            },
+            "reference": {
+              "$ref": "class_alerts"
+            },
+            "multiplicity": "0..1"
+          },
+          "end2": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_alerts_reports_end2",
+            "_parent": {
+              "$ref": "assoc_alerts_reports"
+            },
+            "reference": {
+              "$ref": "class_reports"
+            },
+            "multiplicity": "0..*"
+          }
+        },
+        {
+          "_type": "UMLAssociation",
+          "_id": "assoc_ocr_queue_audits",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "may_commit_to",
+          "end1": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_ocr_queue_audits_end1",
+            "_parent": {
+              "$ref": "assoc_ocr_queue_audits"
+            },
+            "reference": {
+              "$ref": "class_ocr_queue"
+            },
+            "multiplicity": "0..1"
+          },
+          "end2": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_ocr_queue_audits_end2",
+            "_parent": {
+              "$ref": "assoc_ocr_queue_audits"
+            },
+            "reference": {
+              "$ref": "class_audits"
+            },
+            "multiplicity": "0..*"
+          }
+        },
+        {
+          "_type": "UMLAssociation",
+          "_id": "assoc_ocr_queue_lab_results",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "may_commit_to",
+          "end1": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_ocr_queue_lab_results_end1",
+            "_parent": {
+              "$ref": "assoc_ocr_queue_lab_results"
+            },
+            "reference": {
+              "$ref": "class_ocr_queue"
+            },
+            "multiplicity": "0..1"
+          },
+          "end2": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_ocr_queue_lab_results_end2",
+            "_parent": {
+              "$ref": "assoc_ocr_queue_lab_results"
+            },
+            "reference": {
+              "$ref": "class_lab_results"
+            },
+            "multiplicity": "0..*"
+          }
+        },
+        {
+          "_type": "UMLAssociation",
+          "_id": "assoc_ocr_queue_moh_notifications",
+          "_parent": {
+            "$ref": "model_infecsure"
+          },
+          "name": "may_commit_to",
+          "end1": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_ocr_queue_moh_notifications_end1",
+            "_parent": {
+              "$ref": "assoc_ocr_queue_moh_notifications"
+            },
+            "reference": {
+              "$ref": "class_ocr_queue"
+            },
+            "multiplicity": "0..1"
+          },
+          "end2": {
+            "_type": "UMLAssociationEnd",
+            "_id": "assoc_ocr_queue_moh_notifications_end2",
+            "_parent": {
+              "$ref": "assoc_ocr_queue_moh_notifications"
+            },
+            "reference": {
+              "$ref": "class_moh_notifications"
+            },
+            "multiplicity": "0..*"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -7,6 +7,7 @@ from __future__ import annotations
 import base64
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.concurrency import run_in_threadpool
 
 from app.dependencies import require_role
 from app.models.auth import TokenData
@@ -43,7 +44,11 @@ _ICNO_ONLY = Depends(require_role(UserRole.ICNO))
 async def scan_document(body: OCRScanRequest, current_user: TokenData = _ICNO_ONLY):
     """Submit a Base64-encoded image for OCR processing."""
     try:
-        ocr_output = ocr_service.process_image(body.image_base64, body.form_type.value)
+        ocr_output = await run_in_threadpool(
+            ocr_service.process_image,
+            body.image_base64,
+            body.form_type.value,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
