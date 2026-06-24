@@ -35,7 +35,7 @@ async def list_wards(_: TokenData = _ALL_AUTH):
 @router.post("/", status_code=status.HTTP_201_CREATED, summary="Create ward (ICNO only)")
 async def create_ward(body: WardCreate, _: TokenData = _ICNO_ONLY):
     """Register a new hospital ward in the system."""
-    data = body.model_dump()
+    data = body.model_dump(mode="json")
     ward_id = fs.create_ward(data)
     return {"ward_id": ward_id, "message": "Ward created successfully.", **data}
 
@@ -53,7 +53,7 @@ async def update_ward(ward_id: str, body: WardCreate, _: TokenData = _ICNO_ONLY)
     ward = fs.get_ward(ward_id)
     if not ward:
         raise HTTPException(status_code=404, detail="Ward not found.")
-    fs.update_document("wards", ward_id, body.model_dump())
+    fs.update_document("wards", ward_id, body.model_dump(mode="json"))
     return {"ward_id": ward_id, "message": "Ward updated successfully."}
 
 
@@ -89,6 +89,8 @@ async def get_ward_audits(ward_id: str, _: TokenData = _ALL_AUTH):
 async def get_ward_lab_results(ward_id: str, current_user: TokenData = Depends(get_current_user)):
     """Returns lab results for a ward. Staff role sees masked data."""
     results = fs.list_lab_results(ward_id=ward_id)
+    if current_user.role == UserRole.LAB.value:
+        results = [r for r in results if r.get("entered_by_uid") == current_user.uid]
     if current_user.role == UserRole.STAFF.value:
         # Mask patient identifiers
         for r in results:

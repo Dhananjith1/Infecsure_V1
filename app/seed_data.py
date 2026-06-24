@@ -1,11 +1,18 @@
 import random
 import requests
+import os
 from datetime import datetime, timezone
 
 BASE_URL = "http://localhost:8000"
 
 print("🔑 Logging in to get access token...")
-login_data = {"email": "icno@infecsure.com", "password": "icnoPassword123"}
+login_data = {
+    "email": os.environ.get("SEED_LOGIN_EMAIL", "icno@infecsure.com"),
+    "password": os.environ.get("SEED_ICNO_PASSWORD", ""),
+}
+if not login_data["password"]:
+    print("Set SEED_ICNO_PASSWORD before running seed_data.py.")
+    exit()
 
 try:
     login_response = requests.post(f"{BASE_URL}/auth/login", json=login_data)
@@ -35,18 +42,19 @@ def sub_post(label, endpoint, payload):
 # ── 1. USERS ──────────────────────────────────────────────────
 user_res = sub_post("1. Users", "/users/", {
     "email": f"staff_{datetime.now().strftime('%H%M%S')}@infecsure.com",
-    "password": "staffPassword123",
+    "password": os.environ.get("SEED_NEW_USER_PASSWORD", "ChangeMe123!"),
     "role": "icno",
     "full_name": "Officer Smith"
 })
 
 # ── 2. WARDS ──────────────────────────────────────────────────
 wards_data = [
-    {"name": "Intensive Care Unit (ICU)", "ward_type": "icu", "floor": "1", "bed_count": 15, "description": "Critical ICU"},
-    {"name": "Neonatal ICU (NICU)", "ward_type": "icu", "floor": "1", "bed_count": 10, "description": "Infant ICU"},
-    {"name": "Male Surgical Ward", "ward_type": "general", "floor": "2", "bed_count": 40, "description": "Surgical"},
-    {"name": "Female Medical Ward", "ward_type": "general", "floor": "3", "bed_count": 45, "description": "Medical"},
-    {"name": "Pediatric Ward", "ward_type": "general", "floor": "2", "bed_count": 30, "description": "Pediatric Care"}
+    {"name": "ETU", "ward_type": "etu", "floor": "Ground", "bed_count": 0, "description": "Emergency Treatment Unit"},
+    {"name": "Male Ward", "ward_type": "male_ward", "floor": "1", "bed_count": 40, "description": "Male inpatient ward"},
+    {"name": "Female Ward", "ward_type": "female_ward", "floor": "1", "bed_count": 40, "description": "Female inpatient ward"},
+    {"name": "OPD", "ward_type": "opd", "floor": "Ground", "bed_count": 0, "description": "Outpatient Department"},
+    {"name": "Family Medical Clinic", "ward_type": "family_medical_clinic", "floor": "Ground", "bed_count": 0, "description": "Family medical clinic"},
+    {"name": "Psychiatrist Clinic", "ward_type": "psychiatrist_clinic", "floor": "Ground", "bed_count": 0, "description": "Psychiatrist clinic"},
 ]
 
 ward_ids = []

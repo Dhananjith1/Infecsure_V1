@@ -8,7 +8,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class FormType(str, Enum):
@@ -47,3 +47,25 @@ class OCRConfirmRequest(BaseModel):
     scan_id: str
     corrected_fields: dict[str, Any]   # ICNO-edited final values
     commit_to_collection: Optional[str] = None  # e.g. "lab_results", "audits"
+
+    @field_validator("commit_to_collection")
+    @classmethod
+    def validate_commit_target(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+        normalized = value.strip().lower().replace("-", "_")
+        allowed = {
+            "lab",
+            "lab_result",
+            "lab_results",
+            "audit",
+            "audits",
+            "ward_audit",
+            "ward_audits",
+            "moh",
+            "moh_notification",
+            "moh_notifications",
+        }
+        if normalized not in allowed:
+            raise ValueError("commit_to_collection must be lab_results, audits, or moh_notifications.")
+        return normalized

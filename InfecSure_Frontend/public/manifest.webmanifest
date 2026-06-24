@@ -1,0 +1,17 @@
+{
+  "name": "InfecSure",
+  "short_name": "InfecSure",
+  "description": "AI-powered infection monitoring and outbreak response for hospital infection control.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0b6570",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

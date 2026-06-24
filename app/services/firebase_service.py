@@ -8,12 +8,17 @@ All Firestore interactions go through this layer.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from time import monotonic
 from typing import Any, Optional
 
 from google.cloud.firestore_v1 import DocumentSnapshot
 
 from app.config import db
+from app.models.ward import ALLOWED_WARD_IDS, normalize_ward_name, ward_type_for_name
+
+FIRESTORE_LIST_CACHE_SECONDS = 45
+_LIST_CACHE: dict[tuple, tuple[float, list[dict]]] = {}
 
 
 # ─── Generic Helpers ──────────────────────────────────────────────────────────
@@ -35,6 +40,15 @@ def _doc_to_dict(doc: DocumentSnapshot) -> Optional[dict]:
     return data
 
 
+def _cache_key(collection: str, filters: Optional[list[tuple]], order_by: Optional[str], limit: int) -> tuple:
+    return collection, tuple(filters or []), order_by, limit
+
+
+def _clear_collection_cache(collection: str) -> None:
+    for key in [key for key in _LIST_CACHE if key[0] == collection]:
+        _LIST_CACHE.pop(key, None)
+
+
 # ─── Generic CRUD ─────────────────────────────────────────────────────────────
 
 def create_document(collection: str, data: dict, doc_id: Optional[str] = None) -> str:
@@ -43,6 +57,7 @@ def create_document(collection: str, data: dict, doc_id: Optional[str] = None) -
         doc_id = _new_id()
     data["created_at"] = _now()
     db.collection(collection).document(doc_id).set(data)
+    _clear_collection_cache(collection)
     return doc_id
 
 
@@ -54,10 +69,12 @@ def get_document(collection: str, doc_id: str) -> Optional[dict]:
 def update_document(collection: str, doc_id: str, data: dict) -> None:
     data["updated_at"] = _now()
     db.collection(collection).document(doc_id).update(data)
+    _clear_collection_cache(collection)
 
 
 def delete_document(collection: str, doc_id: str) -> None:
     db.collection(collection).document(doc_id).delete()
+    _clear_collection_cache(collection)
 
 
 def list_collection(
@@ -70,6 +87,11 @@ def list_collection(
     List documents from a collection with optional filters.
     filters: list of (field, operator, value) tuples
     """
+    key = _cache_key(collection, filters, order_by, limit)
+    cached = _LIST_CACHE.get(key)
+    if cached and monotonic() - cached[0] < FIRESTORE_LIST_CACHE_SECONDS:
+        return [dict(item) for item in cached[1]]
+
     ref = db.collection(collection)
     if filters:
         for field, op, value in filters:
@@ -83,6 +105,7 @@ def list_collection(
         d = _doc_to_dict(doc)
         if d:
             result.append(d)
+    _LIST_CACHE[key] = (monotonic(), [dict(item) for item in result])
     return result
 
 
@@ -104,7 +127,10 @@ def list_users(limit: int = 100) -> list[dict]:
 # ─── Domain: Wards ────────────────────────────────────────────────────────────
 
 def create_ward(data: dict) -> str:
-    ward_id = _new_id()
+    ward_name = normalize_ward_name(str(data["name"]))
+    ward_id = ward_type_for_name(ward_name).value
+    data["name"] = ward_name
+    data["ward_type"] = ward_id
     data["ward_id"] = ward_id
     data["risk_level"] = "low"
     data["risk_score"] = 0.0
@@ -113,14 +139,30 @@ def create_ward(data: dict) -> str:
 
 
 def get_ward(ward_id: str) -> Optional[dict]:
+    if ward_id not in ALLOWED_WARD_IDS:
+        return None
     return get_document("wards", ward_id)
 
 
+def get_ward_by_name(name: str) -> Optional[dict]:
+    ward_id = ward_type_for_name(normalize_ward_name(name)).value
+    return get_ward(ward_id)
+
+
 def list_wards() -> list[dict]:
-    return list_collection("wards", order_by="name")
+    wards = list_collection("wards", order_by="name", limit=100)
+    allowed_wards = []
+    for ward in wards:
+        ward_id = ward.get("ward_id") or ward.get("_id")
+        if ward_id in ALLOWED_WARD_IDS:
+            ward["ward_id"] = ward_id
+            allowed_wards.append(ward)
+    return allowed_wards
 
 
 def update_ward_risk(ward_id: str, risk_score: float, risk_level: str, compliance_score: float) -> None:
+    if ward_id not in ALLOWED_WARD_IDS:
+        return
     update_document("wards", ward_id, {
         "risk_score": risk_score,
         "risk_level": risk_level,
@@ -165,6 +207,27 @@ def list_lab_results(ward_id: Optional[str] = None, limit: int = 100) -> list[di
     return list_collection("lab_results", filters=filters, order_by="created_at", limit=limit)
 
 
+def count_positive_cultures_48h(ward_id: str, pathogen_id: Optional[str] = None) -> int:
+    cutoff = _now() - timedelta(hours=48)
+    results = list_lab_results(ward_id=ward_id, limit=50)
+    count = 0
+    for result in results:
+        created_at = result.get("created_at")
+        if isinstance(created_at, str):
+            try:
+                created_at = datetime.fromisoformat(created_at)
+            except ValueError:
+                created_at = None
+        if created_at and created_at < cutoff:
+            continue
+        if pathogen_id and result.get("pathogen_id") != pathogen_id:
+            continue
+        colony_count = result.get("colony_count")
+        if colony_count is None or colony_count > 0:
+            count += 1
+    return count
+
+
 def get_pathogen_history(pathogen_id: str, limit: int = 90) -> list[dict]:
     """Retrieve last N lab results for a pathogen (used by Z-Score)."""
     return list_collection(
@@ -189,6 +252,7 @@ def upsert_pathogen_stats(pathogen_id: str, mean: float, std: float, count: int)
         "count": count,
         "updated_at": _now(),
     }, merge=True)
+    _clear_collection_cache("pathogen_stats")
 
 
 # ─── Domain: Pathogens ────────────────────────────────────────────────────────
@@ -243,6 +307,44 @@ def reject_alert(alert_id: str, validated_by_uid: str, icno_notes: Optional[str]
     })
 
 
+def acknowledge_alert_with_instructions(
+    alert_id: str,
+    doctor_uid: str,
+    doctor_name: str,
+    acknowledgement_notes: Optional[str],
+    management_instructions: str,
+    follow_up_required: bool,
+) -> str:
+    instruction_id = _new_id()
+    instruction = {
+        "instruction_id": instruction_id,
+        "alert_id": alert_id,
+        "doctor_uid": doctor_uid,
+        "doctor_name": doctor_name,
+        "acknowledgement_notes": acknowledgement_notes,
+        "management_instructions": management_instructions,
+        "follow_up_required": follow_up_required,
+        "created_at": _now(),
+    }
+    db.collection("management_instructions").document(instruction_id).set(instruction)
+    _clear_collection_cache("management_instructions")
+    update_document("alerts", alert_id, {
+        "doctor_acknowledged_at": _now(),
+        "doctor_acknowledged_by_uid": doctor_uid,
+        "doctor_acknowledged_by_name": doctor_name,
+        "doctor_acknowledgement_notes": acknowledgement_notes,
+        "doctor_instructions": management_instructions,
+        "doctor_follow_up_required": follow_up_required,
+        "latest_instruction_id": instruction_id,
+    })
+    return instruction_id
+
+
+def list_management_instructions(alert_id: Optional[str] = None, limit: int = 100) -> list[dict]:
+    filters = [("alert_id", "==", alert_id)] if alert_id else None
+    return list_collection("management_instructions", filters=filters, order_by="created_at", limit=limit)
+
+
 # ─── Domain: OCR Queue ────────────────────────────────────────────────────────
 
 def create_ocr_record(data: dict) -> str:
@@ -274,7 +376,7 @@ def list_ocr_queue(status: str = "pending_review") -> list[dict]:
 # ─── Domain: Reports ─────────────────────────────────────────────────────────
 
 def create_report_record(data: dict) -> str:
-    report_id = _new_id()
+    report_id = data.get("report_id") or _new_id()
     data["report_id"] = report_id
     return create_document("reports", data, doc_id=report_id)
 

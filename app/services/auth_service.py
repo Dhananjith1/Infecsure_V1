@@ -1,10 +1,5 @@
 """
-InfecSure — Authentication Service
-====================================
-Handles:
-  - Firebase Auth email/password sign-in via REST API
-  - JWT access + refresh token creation and verification
-  - User credential seeding (first-run)
+InfecSure - Authentication Service
 """
 
 from __future__ import annotations
@@ -16,30 +11,19 @@ from typing import Optional
 import httpx
 from jose import JWTError, jwt
 
-from app.config import get_settings, db, auth_client
+from app.config import auth_client, db, get_settings
 from app.models.auth import TokenData, TokenResponse
-from app.models.user import UserRole
 
 settings = get_settings()
 
-# ─── Credential map (email → role) ───────────────────────────────────────────
-ROLE_MAP: dict[str, UserRole] = {
-    "icno@infecsure.com":    UserRole.ICNO,
-    "matron@infecsure.com":  UserRole.SISTER,
-    "lab@infecsure.com":     UserRole.LAB,
-    "doctor@infecsure.com":  UserRole.DOCTOR,
-    "staff@infecsure.com":   UserRole.STAFF,
-}
+FIREBASE_WEB_API_KEY = settings.firebase_web_api_key or os.environ.get("FIREBASE_WEB_API_KEY", "")
+ALLOWED_ROLES = {"icno", "sister", "lab", "doctor", "staff"}
 
-FIREBASE_WEB_API_KEY = os.environ.get("FIREBASE_WEB_API_KEY", "")
-
-
-# ─── Token Helpers ────────────────────────────────────────────────────────────
 
 def _create_token(data: dict, expires_delta: timedelta) -> str:
     payload = data.copy()
-    expire = datetime.now(timezone.utc) + expires_delta
-    payload.update({"exp": expire, "iat": datetime.now(timezone.utc)})
+    now = datetime.now(timezone.utc)
+    payload.update({"exp": now + expires_delta, "iat": now})
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
@@ -58,7 +42,6 @@ def create_refresh_token(uid: str, email: str, role: str) -> str:
 
 
 def decode_token(token: str) -> TokenData:
-    """Decode and validate a JWT.  Raises JWTError on failure."""
     payload = jwt.decode(
         token,
         settings.jwt_secret_key,
@@ -72,15 +55,17 @@ def decode_token(token: str) -> TokenData:
     return TokenData(uid=uid, email=email, role=role)
 
 
-# ─── Firebase Sign-In via REST ────────────────────────────────────────────────
-
 async def firebase_sign_in(email: str, password: str) -> dict:
     """
-    Sign in a user via Firebase Auth REST endpoint.
-    Returns the Firebase user payload on success.
+    Verify email/password through Firebase Authentication REST API.
     """
+    if not FIREBASE_WEB_API_KEY:
+        raise RuntimeError(
+            "FIREBASE_WEB_API_KEY is required for secure email/password login."
+        )
+
     url = (
-        f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword"
+        "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword"
         f"?key={FIREBASE_WEB_API_KEY}"
     )
     async with httpx.AsyncClient() as client:
@@ -95,10 +80,7 @@ async def firebase_sign_in(email: str, password: str) -> dict:
     return data
 
 
-# ─── Admin SDK Sign-In (no Web API key needed) ────────────────────────────────
-
 def admin_verify_user(email: str) -> Optional[dict]:
-    """Look up a Firebase user by email using Admin SDK."""
     try:
         user = auth_client.get_user_by_email(email)
         return {"uid": user.uid, "email": user.email, "display_name": user.display_name}
@@ -106,13 +88,30 @@ def admin_verify_user(email: str) -> Optional[dict]:
         return None
 
 
-def get_role_for_email(email: str) -> Optional[str]:
-    """Return the static role assignment for a known email."""
-    role = ROLE_MAP.get(email.lower())
-    return role.value if role else None
+def _clean_role(role: Optional[str]) -> Optional[str]:
+    if not role:
+        return None
+    role_value = str(role).strip().lower()
+    return role_value if role_value in ALLOWED_ROLES else None
 
 
-# ─── Build Token Response ─────────────────────────────────────────────────────
+def role_from_authenticated_user(user_doc: Optional[dict], uid: str) -> Optional[str]:
+    """
+    Resolve RBAC role only from trusted backend data:
+    1. Firestore users/{uid} or users query profile.
+    2. Firebase Auth custom claims (`role`) as fallback.
+    """
+    profile_role = _clean_role(user_doc.get("role") if user_doc else None)
+    if profile_role:
+        return profile_role
+
+    try:
+        fb_user = auth_client.get_user(uid)
+        claims = fb_user.custom_claims or {}
+        return _clean_role(claims.get("role"))
+    except Exception:
+        return None
+
 
 def build_token_response(uid: str, email: str, role: str) -> TokenResponse:
     return TokenResponse(
@@ -123,52 +122,55 @@ def build_token_response(uid: str, email: str, role: str) -> TokenResponse:
     )
 
 
-# ─── Seed Default Users (call once on startup) ────────────────────────────────
-
 DEFAULT_USERS = [
-    {"email": "icno@infecsure.com",    "password": "icnoPassword123",    "name": "ICNO Officer",       "role": UserRole.ICNO},
-    {"email": "matron@infecsure.com",  "password": "matronPassword123",  "name": "Acting Matron",      "role": UserRole.SISTER},
-    {"email": "lab@infecsure.com",     "password": "labPassword123",     "name": "Lab Personnel",      "role": UserRole.LAB},
-    {"email": "doctor@infecsure.com",  "password": "doctorPassword123",  "name": "Supervising Doctor", "role": UserRole.DOCTOR},
-    {"email": "staff@infecsure.com",   "password": "staffPassword123",   "name": "Hospital Staff",     "role": UserRole.STAFF},
+    {"email": "icno@infecsure.com", "password_env": "SEED_ICNO_PASSWORD", "name": "ICNO Officer", "role": "icno"},
+    {"email": "matron@infecsure.com", "password_env": "SEED_SISTER_PASSWORD", "name": "Acting Matron", "role": "sister"},
+    {"email": "lab@infecsure.com", "password_env": "SEED_LAB_PASSWORD", "name": "Lab Personnel", "role": "lab"},
+    {"email": "doctor@infecsure.com", "password_env": "SEED_DOCTOR_PASSWORD", "name": "Supervising Doctor", "role": "doctor"},
+    {"email": "staff@infecsure.com", "password_env": "SEED_STAFF_PASSWORD", "name": "Hospital Staff", "role": "staff"},
 ]
 
 
 async def seed_default_users() -> None:
     """
-    Idempotently create the five default system accounts in Firebase Auth
-    and store their profiles in Firestore `users` collection.
+    Idempotently create configured default accounts.
+    Passwords must come from SEED_* environment variables.
     """
     users_ref = db.collection("users")
+    seeded_count = 0
+
     for user_data in DEFAULT_USERS:
         email = user_data["email"]
-        # Check if already exists in Firestore
+        password = os.environ.get(user_data["password_env"], "")
+        if not password:
+            continue
+
         existing = users_ref.where("email", "==", email).limit(1).get()
         if existing:
             continue
-        # Create in Firebase Auth
+
         try:
             fb_user = auth_client.create_user(
                 email=email,
-                password=user_data["password"],
+                password=password,
                 display_name=user_data["name"],
             )
             uid = fb_user.uid
         except Exception:
-            # User might already exist in Auth — fetch uid
             try:
                 fb_user = auth_client.get_user_by_email(email)
                 uid = fb_user.uid
             except Exception:
                 continue
 
-        # Persist profile to Firestore
         users_ref.document(uid).set({
             "uid": uid,
             "email": email,
             "full_name": user_data["name"],
-            "role": user_data["role"].value,
+            "role": user_data["role"],
             "is_active": True,
             "created_at": datetime.now(timezone.utc),
         })
-    print("✅  Default users seeded successfully.")
+        seeded_count += 1
+
+    print(f"Default user seeding complete. Created {seeded_count} account(s).")

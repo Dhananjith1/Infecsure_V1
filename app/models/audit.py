@@ -17,6 +17,39 @@ class ComplianceItem(BaseModel):
     notes: Optional[str] = None
 
 
+class AuditMetricCounts(BaseModel):
+    """Raw numerator/denominator counts captured by the PWA."""
+
+    correct: int = Field(..., ge=0)
+    total: int = Field(..., ge=0)
+
+
+class WasteSegregationCounts(BaseModel):
+    """Waste audit counts where fewer misplaced items means better compliance."""
+
+    misplaced_items: int = Field(..., ge=0)
+    total_items: int = Field(..., ge=0)
+
+
+class AuditSyncItem(BaseModel):
+    ward_id: str
+    hand_hygiene: AuditMetricCounts
+    ppe_adherence: AuditMetricCounts
+    waste_segregation: WasteSegregationCounts
+    environmental_score: float = Field(..., ge=0.0, le=100.0)
+    hand_hygiene_items: list[ComplianceItem] = []
+    ppe_items: list[ComplianceItem] = []
+    waste_segregation_items: list[ComplianceItem] = []
+    environmental_items: list[ComplianceItem] = []
+    remarks: Optional[str] = None
+    offline_record_id: Optional[str] = None
+    captured_at: Optional[datetime] = None
+
+
+class AuditSyncRequest(BaseModel):
+    records: list[AuditSyncItem]
+
+
 class AuditCreate(BaseModel):
     ward_id: str
     # Hand Hygiene section

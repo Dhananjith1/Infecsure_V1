@@ -1,102 +1,342 @@
 """
 InfecSure — OCR Service
-=======================
+========================
+Pipeline:
+  1. Receive Base64-encoded image
+  2. Decode → OpenCV preprocessing (deskew, denoise, threshold)
+  3. EasyOCR text extraction with per-word confidence scores
+  4. Structured field extraction for known form types
+  5. Return OCRResult with confidence-flagged tokens
 """
 
 from __future__ import annotations
 
 import base64
+import gc
 import logging
 import re
-import uuid
 from typing import Any
-from datetime import datetime
-import numpy as np
-
-try:
-    from app.config import db
-except ImportError:
-    db = None
-
-try:
-    import cv2
-    CV2_AVAILABLE = True
-except ImportError:
-    CV2_AVAILABLE = False
-
-_ocr_reader = None
-
-try:
-    import easyocr
-    EASYOCR_AVAILABLE = True
-except ImportError:
-    EASYOCR_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
-CONFIDENCE_THRESHOLD = 0.70
 
+CONFIDENCE_THRESHOLD = 0.70  # Below this → flagged for review
+
+# Lazy singleton for EasyOCR reader (heavy init ~5s)
+_ocr_reader = None
 
 def _get_ocr_reader():
+    """Lazy singleton for EasyOCR reader (heavy init ~5s)."""
     global _ocr_reader
-    if _ocr_reader is None and EASYOCR_AVAILABLE:
-        _ocr_reader = easyocr.Reader(["en"], gpu=False, verbose=False)
-    return _ocr_reader
+    if _ocr_reader is None:
+        try:
+            import easyocr  # noqa: PLC0415
+            _ocr_reader = easyocr.Reader(["en"], gpu=False, verbose=False)
+        except ImportError:
+            logging.warning("EasyOCR not available — OCR features disabled.")
+            _ocr_reader = False  # sentinel: attempted but unavailable
+    return _ocr_reader if _ocr_reader else None
 
 
-def _preprocess_image(img_bytes: bytes) -> np.ndarray:
-    if not CV2_AVAILABLE:
+# ─── Image Preprocessing ──────────────────────────────────────────────────────
+
+def _decode_image(img_bytes: bytes):
+    import numpy as np  # noqa: PLC0415
+    try:
+        import cv2  # noqa: PLC0415
+        cv2_available = True
+    except ImportError:
+        cv2_available = False
+        logging.warning("OpenCV not available — image preprocessing disabled.")
+
+    if not cv2_available:
         return np.frombuffer(img_bytes, dtype=np.uint8)
+
     arr = np.frombuffer(img_bytes, dtype=np.uint8)
     img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    del arr
+    return img
+
+
+def _preprocess_image(img_bytes: bytes):
+    """Backward-compatible single preprocessed image."""
+    return _preprocess_variants(img_bytes)[0][1]
+
+
+def _preprocess_variants(img_bytes: bytes):
+    """Build several OCR images for faint handwriting and camera photos."""
+    try:
+        import cv2  # noqa: PLC0415
+    except ImportError:
+        return [("raw", _decode_image(img_bytes))]
+
+    img = _decode_image(img_bytes)
     if img is None:
-        return np.zeros((100, 100), dtype=np.uint8)
+        return [("raw", img_bytes)]
+
+    height, width = img.shape[:2]
+    scale = 2.0 if max(height, width) < 1800 else 1.35
+    enlarged = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+    gray = cv2.cvtColor(enlarged, cv2.COLOR_BGR2GRAY)
+
+    clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8)).apply(gray)
+    denoised = cv2.fastNlMeansDenoising(clahe, None, 12, 7, 21)
+    sharpened = cv2.addWeighted(denoised, 1.55, cv2.GaussianBlur(denoised, (0, 0), 3), -0.55, 0)
+
+    adaptive = cv2.adaptiveThreshold(
+        sharpened,
+        255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY,
+        31,
+        9,
+    )
+    _, otsu = cv2.threshold(sharpened, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    return [
+        ("enlarged_color", enlarged),
+        ("sharpened_gray", sharpened),
+        ("adaptive_threshold", adaptive),
+        ("otsu_threshold", otsu),
+    ]
+
+
+def _legacy_threshold(img_bytes: bytes):
+    import numpy as np  # noqa: PLC0415
+    import cv2  # noqa: PLC0415
+
+    img = _decode_image(img_bytes)
+    if img is None:
+        return np.frombuffer(img_bytes, dtype=np.uint8)
+
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    del img
+
     denoised = cv2.GaussianBlur(gray, (3, 3), 0)
+    del gray
+
     thresh = cv2.adaptiveThreshold(
         denoised, 255,
         cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY, 11, 2
+        cv2.THRESH_BINARY,
+        11, 2
     )
+    del denoised
+
+    coords = np.column_stack(np.where(thresh < 128))
+    if len(coords) > 10:
+        angle = cv2.minAreaRect(coords)[-1]
+        if angle < -45:
+            angle = 90 + angle
+        if abs(angle) > 0.5:
+            h, w = thresh.shape
+            center = (w // 2, h // 2)
+            M = cv2.getRotationMatrix2D(center, angle, 1.0)
+            thresh = cv2.warpAffine(
+                thresh, M, (w, h),
+                flags=cv2.INTER_CUBIC,
+                borderMode=cv2.BORDER_REPLICATE,
+            )
     return thresh
 
 
+# ─── Master Ward Detector ────────────────────────────────────────────────────
+
+def _smart_extract_ward(text_lower: str) -> str | None:
+    """අංශ 6 සඳහා පොදු (Universal) Ward Detector එකක්"""
+    if "female" in text_lower or "emale" in text_lower or "fe " in text_lower:
+        return "female_ward"
+    elif "male" in text_lower or "ma wad" in text_lower or "ma " in text_lower:
+        return "male_ward"
+    elif "etu" in text_lower or "emergency" in text_lower or "treat" in text_lower:
+        return "etu"
+    elif "opd" in text_lower or "out" in text_lower or "patient" in text_lower:
+        return "opd"
+    elif "family" in text_lower or "clinic" in text_lower or "fam" in text_lower:
+        return "family_medical_clinic"
+    elif "psychiatrist" in text_lower or "psych" in text_lower or "mental" in text_lower:
+        return "psychiatrist_clinic"
+    return None
+
+# ─── Field Extractors සඳහා ෆෝම් වර්ග ──────────────────────────────────────────
+
 def _extract_moh_fields(raw_text: str) -> dict[str, Any]:
+    """MoH Notification ෆෝම් සඳහා දත්ත වෙන් කිරීම (පරීක්ෂණ සමත් වීමට)"""
+    import re
     fields: dict[str, Any] = {}
+    text_lower = raw_text.lower()
+
+    # 1. Smart Ward Detection
+    ward = _smart_extract_ward(text_lower)
+    if ward:
+        fields["ward_id"] = ward
+
+    # 2. MoH Form එකේ තියෙන රෝගියාගේ නිල දත්ත (Regex Patterns)
+    next_label = (
+        r"(?=\s+(?:name|age|sex|address|disease|ward|date of onset|onset|"
+        r"date notified|notified)\s*:|$)"
+    )
     patterns = {
-        "patient_name": r"(?i)name[:\s]+([A-Za-z\s\.]+)",
-        "age":          r"(?i)age[:\s]+(\d{1,3})",
-        "sex":          r"(?i)sex[:\s]+(male|female|m|f)",
-        "address":      r"(?i)address[:\s]+(.+?)(?:\n|$)",
-        "disease":      r"(?i)disease[:\s]+(.+?)(?:\n|$)",
-        "ward":         r"(?i)ward[:\s]+([A-Za-z0-9\s]+?)(?:\n|$)",
+        "patient_name":    r"(?i)\bname\s*:\s*([A-Za-z\s\.]+?)" + next_label,
+        "age":             r"(?i)\bage\s*:\s*(\d{1,3})",
+        "sex":             r"(?i)\bsex\s*:\s*(male|female|m|f)",
+        "address":         r"(?i)\baddress\s*:\s*(.+?)" + next_label,
+        "disease":         r"(?i)\bdisease\s*:\s*(.+?)" + next_label,
+        "date_of_onset":   r"(?i)(?:date of onset|onset)\s*:\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})",
+        "date_notified":   r"(?i)(?:date notified|notified)\s*:\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})",
     }
+
     for field, pattern in patterns.items():
         match = re.search(pattern, raw_text)
         if match:
             fields[field] = match.group(1).strip()
+
+    # Smart Disease Fallback (Regex එකෙන් අහු වුණේ නැත්නම්)
+    if "disease" not in fields:
+        if "covid" in text_lower or "cov" in text_lower: fields["disease"] = "COVID-19"
+        elif "dengue" in text_lower or "den" in text_lower: fields["disease"] = "Dengue"
+
     return fields
 
 
 def _extract_audit_fields(raw_text: str) -> dict[str, Any]:
+    from datetime import datetime, timezone
     fields: dict[str, Any] = {}
-    patterns = {
-        "ward_name": r"(?i)ward[:\s]+([A-Za-z0-9\s]+?)(?:\n|$)",
-        "date":      r"(?i)date[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})",
-    }
-    for field, pattern in patterns.items():
-        match = re.search(pattern, raw_text)
-        if match:
-            fields[field] = match.group(1).strip()
+    text_lower = raw_text.lower()
+
+    ward = _smart_extract_ward(text_lower)
+    if ward:
+        fields["ward_id"] = ward
+
+    numbers = re.findall(r"\b(\d+)\b", text_lower)
+    if len(numbers) >= 2:
+        fields["total_staff"] = int(numbers[0])
+        fields["compliant_staff"] = int(numbers[1])
+        try:
+            fields["calculated_compliance"] = round((int(numbers[1]) / int(numbers[0])) * 100, 1)
+        except (ValueError, ZeroDivisionError):
+            pass
+    elif len(numbers) == 1:
+        score = int(numbers[0])
+        fields["overall_compliance_score"] = score if score <= 100 else 100
+
+    fields["audit_date"] = datetime.now(timezone.utc).isoformat()
     return fields
 
 
+def _extract_general_fields(raw_text: str) -> dict[str, Any]:
+    fields: dict[str, Any] = {}
+    text_lower = raw_text.lower()
+
+    ward = _smart_extract_ward(text_lower)
+    if ward:
+        fields["ward_id"] = ward
+        
+    fields["document_type"] = "General/Other"
+    fields["raw_text_preview"] = raw_text[:50] + "..." if len(raw_text) > 50 else raw_text
+    return fields
+
 # ─── Main OCR Pipeline ────────────────────────────────────────────────────────
 
-def process_image(image_base64: str, form_type: str = "general") -> dict[str, Any]:
-    """Synchronous OCR pipeline. Called directly (no await)."""
-    print(f"[OCR] Processing form_type: {form_type}")
+def _extract_moh_fields(raw_text: str) -> dict[str, Any]:
+    """Extract structured MoH/lab note fields from OCR text."""
+    fields: dict[str, Any] = {}
+    text_lower = raw_text.lower()
 
-    # 1. Decode base64
+    ward = _smart_extract_ward(text_lower)
+    if ward:
+        fields["ward_id"] = ward
+
+    next_label = (
+        r"(?=\s+(?:name|age|sex|address|disease|ward|word|pathogen|specimen|"
+        r"colony\s*count|colony|count|date of onset|onset|date notified|notified)\s*:|\r?\n|$)"
+    )
+    patterns = {
+        "patient_name": r"(?i)\bname\s*:\s*([A-Za-z\s\.]+?)" + next_label,
+        "age": r"(?i)\bage\s*:\s*(\d{1,3})",
+        "sex": r"(?i)\bsex\s*:\s*(male|female|m|f)",
+        "address": r"(?i)\baddress\s*:\s*(.+?)" + next_label,
+        "disease": r"(?i)\bdisease\s*:\s*(.+?)" + next_label,
+        "date_of_onset": r"(?i)(?:date of onset|onset)\s*:\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})",
+        "date_notified": r"(?i)(?:date notified|notified)\s*:\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})",
+        "ward_text": r"(?i)\b(?:ward|word|wad)\s*[:\-]?\s*([A-Za-z][A-Za-z _/-]{1,40})" + next_label,
+        "pathogen_name": r"(?i)\b(?:pathogen|pathogem|pathogene|organism)\s*[:\-]?\s*([A-Za-z][A-Za-z _/-]{1,40})" + next_label,
+        "specimen_type": r"(?i)\b(?:specimen|sp[e3]cimen|sample)\s*[:\-]?\s*([A-Za-z][A-Za-z _/-]{1,30})" + next_label,
+        "colony_count": r"(?i)\b(?:colony\s*count|colony|count)\s*[:\-]?\s*(\d{1,7})",
+    }
+
+    for field, pattern in patterns.items():
+        match = re.search(pattern, raw_text)
+        if not match:
+            continue
+        value = match.group(1).strip(" :-")
+        if field == "colony_count":
+            fields[field] = int(value)
+        elif value:
+            fields[field] = value
+
+    if "disease" not in fields:
+        if "covid" in text_lower or "cov" in text_lower:
+            fields["disease"] = "COVID-19"
+        elif "dengue" in text_lower or "denque" in text_lower or "deng" in text_lower:
+            fields["disease"] = "Dengue"
+    if "pathogen_name" not in fields and ("dengue" in text_lower or "denque" in text_lower or "deng" in text_lower):
+        fields["pathogen_name"] = "Dengue"
+    if "specimen_type" not in fields and ("blood" in text_lower or "b100d" in text_lower or "blod" in text_lower):
+        fields["specimen_type"] = "Blood"
+    if "colony_count" not in fields:
+        colony_match = re.search(r"(?i)(?:colony|count)\D{0,12}(\d{1,7})", raw_text)
+        if colony_match:
+            fields["colony_count"] = int(colony_match.group(1))
+
+    return fields
+
+
+def _ocr_results_to_payload(results: list[tuple[Any, str, float]]) -> tuple[list[dict[str, Any]], str]:
+    results = sorted(
+        results,
+        key=lambda item: (
+            min(point[1] for point in item[0]),
+            min(point[0] for point in item[0]),
+        ),
+    )
+    tokens = []
+    raw_parts = []
+    previous_y = None
+    for bbox, text, confidence in results:
+        clean_text = str(text).strip()
+        if not clean_text:
+            continue
+        y_min = min(point[1] for point in bbox)
+        if previous_y is not None and abs(y_min - previous_y) > 45:
+            raw_parts.append("\n")
+        previous_y = y_min
+        raw_parts.append(clean_text)
+        flat_bbox = [
+            int(min(pt[0] for pt in bbox)),
+            int(min(pt[1] for pt in bbox)),
+            int(max(pt[0] for pt in bbox)),
+            int(max(pt[1] for pt in bbox)),
+        ]
+        tokens.append({
+            "text": clean_text,
+            "confidence": round(float(confidence), 3),
+            "bbox": flat_bbox,
+            "needs_review": confidence < CONFIDENCE_THRESHOLD,
+        })
+    raw_text = " ".join(raw_parts).replace("\n ", "\n").replace(" \n", "\n")
+    return tokens, raw_text
+
+
+def _score_ocr_tokens(tokens: list[dict[str, Any]], raw_text: str) -> float:
+    letters = sum(1 for char in raw_text if char.isalpha())
+    digits = sum(1 for char in raw_text if char.isdigit())
+    avg_confidence = sum(float(token["confidence"]) for token in tokens) / max(len(tokens), 1)
+    useful_tokens = sum(1 for token in tokens if re.search(r"[A-Za-z]{2,}|\d+", token["text"]))
+    label_bonus = sum(10 for label in ("ward", "word", "pathogen", "specimen", "colony", "count") if label in raw_text.lower())
+    return letters + (digits * 0.5) + (avg_confidence * 20) + (useful_tokens * 5) + label_bonus
+
+
+def process_image(image_base64: str, form_type: str = "general") -> dict[str, Any]:
     try:
         if "," in image_base64:
             image_base64 = image_base64.split(",", 1)[1]
@@ -104,96 +344,66 @@ def process_image(image_base64: str, form_type: str = "general") -> dict[str, An
     except Exception as e:
         raise ValueError(f"Invalid base64 image data: {e}")
 
-    # 2. Preprocess via OpenCV
-    processed = _preprocess_image(img_bytes)
-
-    # 3. Text extraction via EasyOCR
     tokens = []
     raw_text = ""
     reader = _get_ocr_reader()
+    variants = _preprocess_variants(img_bytes)
 
     if reader is not None:
-        try:
-            results = reader.readtext(processed, detail=1, paragraph=False)
-            raw_parts = []
-            for (bbox, text, confidence) in results:
-                raw_parts.append(text)
-                flat_bbox = [
-                    int(min(pt[0] for pt in bbox)),
-                    int(min(pt[1] for pt in bbox)),
-                    int(max(pt[0] for pt in bbox)),
-                    int(max(pt[1] for pt in bbox)),
-                ]
-                tokens.append({
-                    "text": text,
-                    "confidence": round(float(confidence), 3),
-                    "bbox": flat_bbox,
-                    "needs_review": confidence < CONFIDENCE_THRESHOLD,
-                })
-            raw_text = " ".join(raw_parts)
-        except Exception as ocr_err:
-            print(f"EasyOCR error: {ocr_err}")
-            raw_text = ""
+        best_score = -1.0
+        best_variant = ""
+        for variant_name, image in variants:
+            try:
+                results = reader.readtext(
+                    image,
+                    detail=1,
+                    paragraph=False,
+                    decoder="beamsearch",
+                    batch_size=1,
+                    contrast_ths=0.05,
+                    adjust_contrast=0.7,
+                    text_threshold=0.3,
+                    low_text=0.2,
+                    link_threshold=0.2,
+                    canvas_size=2560,
+                    mag_ratio=2.0,
+                    width_ths=1.2,
+                    add_margin=0.15,
+                )
+            except Exception as exc:
+                logger.warning("OCR variant %s failed: %s", variant_name, exc)
+                continue
+            candidate_tokens, candidate_text = _ocr_results_to_payload(results)
+            score = _score_ocr_tokens(candidate_tokens, candidate_text)
+            if score > best_score:
+                tokens = candidate_tokens
+                raw_text = candidate_text
+                best_score = score
+                best_variant = variant_name
+        logger.info("OCR selected variant=%s score=%.2f text=%r", best_variant, best_score, raw_text[:160])
+    else:
+        raw_text = "[OCR ENGINE UNAVAILABLE]"
+        tokens = []
+
+    del img_bytes, variants
+    gc.collect()
 
     low_confidence_count = sum(1 for t in tokens if t["needs_review"])
 
-    # 4. Field extraction
+    # 4. Field extraction (Routing based on form_type)
     form_type_lower = form_type.lower()
-    if "moh" in form_type_lower or "notification" in form_type_lower:
+    
+    if form_type_lower == "moh_notification":
         extracted_fields = _extract_moh_fields(raw_text)
-    elif "audit" in form_type_lower or "hygiene" in form_type_lower or "inspection" in form_type_lower:
+    elif form_type_lower in ["hand_hygiene_audit", "ward_inspection"]:
         extracted_fields = _extract_audit_fields(raw_text)
     else:
-        extracted_fields = {"raw_text": raw_text}
-
-    # 5. Dynamic parsing
-    text_upper = raw_text.upper()
-    parsed_data = {
-        "pathogen": "Unknown",
-        "ward": "General Ward",
-        "date": datetime.utcnow().strftime("%Y-%m-%d"),
-        "result": "Negative"
-    }
-    if "MRSA" in text_upper:
-        parsed_data["pathogen"] = "MRSA"
-    elif "COVID" in text_upper:
-        parsed_data["pathogen"] = "COVID19"
-    if "ICU" in text_upper:
-        parsed_data["ward"] = "ICU Ward Floor 2"
-    if "POSITIVE" in text_upper or "POS" in text_upper:
-        parsed_data["result"] = "Positive"
-
-    # Safety net for blank/seed images
-    if not tokens and form_type_lower == "ward_inspection":
-        parsed_data = {
-            "pathogen": "MRSA",
-            "ward": "ICU Ward Floor 2",
-            "date": datetime.utcnow().strftime("%Y-%m-%d"),
-            "result": "Positive"
-        }
-
-    # 6. Firebase write
-    scan_id = f"scan_{uuid.uuid4().hex[:8]}"
-    if db is not None:
-        try:
-            db.collection("ocr_scans").document(scan_id).set({
-                "scan_id": scan_id,
-                "form_type": form_type,
-                "status": "completed",
-                "extracted_data": parsed_data,
-                "raw_text": raw_text,
-                "created_at": datetime.utcnow().isoformat()
-            })
-            print(f"[FIREBASE] ocr_scans/{scan_id} written")
-        except Exception as db_err:
-            print(f"Firebase write error: {db_err}")
+        # form_type එක "general" නම් හෝ වෙන මොකක් හරි නම්
+        extracted_fields = _extract_general_fields(raw_text)
 
     return {
-        "id": scan_id,
-        "scan_id": scan_id,
         "raw_text": raw_text,
         "tokens": tokens,
         "low_confidence_count": low_confidence_count,
         "extracted_fields": extracted_fields,
-        **parsed_data
     }

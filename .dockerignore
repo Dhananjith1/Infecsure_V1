@@ -1,0 +1,14 @@
+# ─── Render / Docker build exclusions ────────────────────────────────────────
+# Keeps the deployed image/slug lean.
+# NOTE: Do NOT add *.pkl here — the prediction endpoint may depend on model files.
+
+venv/
+.git/
+.github/
+tests/
+docs/
+*.md
+*.pyc
+__pycache__/
+local_test_images/
+sample_data.csv

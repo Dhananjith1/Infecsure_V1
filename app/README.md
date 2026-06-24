@@ -34,13 +34,13 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ## 🔑 Default Login Credentials
 
-| Role | Email | Password |
-|------|-------|----------|
-| **ICNO** (Admin) | icno@infecsure.com | icnoPassword123 |
-| **Nursing Sister** | matron@infecsure.com | matronPassword123 |
-| **Lab Personnel** | lab@infecsure.com | labPassword123 |
-| **Supervising Doctor** | doctor@infecsure.com | doctorPassword123 |
-| **Hospital Staff** | staff@infecsure.com | staffPassword123 |
+InfecSure verifies email/password login through Firebase Authentication.
+Set `FIREBASE_WEB_API_KEY` in `.env`, and store each user's role in the
+Firestore `users` collection.
+
+Optional startup seed accounts use the `SEED_ICNO_PASSWORD`,
+`SEED_SISTER_PASSWORD`, `SEED_LAB_PASSWORD`, `SEED_DOCTOR_PASSWORD`, and
+`SEED_STAFF_PASSWORD` environment variables. Leave them blank to skip seeding.
 
 ---
 

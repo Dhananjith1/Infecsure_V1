@@ -2,6 +2,10 @@
 InfecSure — Report Generation Service
 =======================================
 Generates PDF and Excel executive reports.
+
+Heavy libraries (reportlab, openpyxl) are imported lazily inside each
+generator function so they only load when a report is actually requested,
+keeping idle RAM low on Render's free tier.
 """
 
 from __future__ import annotations
@@ -12,49 +16,22 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
-from reportlab.lib import colors
 
 logger = logging.getLogger(__name__)
-
-# PDF / Excel wrapped for graceful degradation
-try:
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import cm
-    from reportlab.platypus import (
-        SimpleDocTemplate, Table, TableStyle, Paragraph,
-        Spacer, HRFlowable,
-    )
-    from reportlab.lib.enums import TA_CENTER, TA_LEFT
-    REPORTLAB_AVAILABLE = True
-except ImportError:
-    REPORTLAB_AVAILABLE = False
-    logger.warning("ReportLab not available — PDF generation disabled.")
-
-try:
-    import openpyxl
-    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-    OPENPYXL_AVAILABLE = True
-except ImportError:
-    OPENPYXL_AVAILABLE = False
-    logger.warning("openpyxl not available — Excel generation disabled.")
 
 # Reports are saved to a temp directory (or Firebase Storage in production)
 REPORTS_DIR = Path("reports_output")
 REPORTS_DIR.mkdir(exist_ok=True)
 
-SEVERITY_COLORS = {
-    "low":      colors.HexColor("#28a745"),
-    "medium":   colors.HexColor("#ffc107"),
-    "high":     colors.HexColor("#fd7e14"),
-    "critical": colors.HexColor("#dc3545"),
-}
-
 
 # ─── PDF Generation ───────────────────────────────────────────────────────────
 
 def _get_pdf_styles():
+    """Build ReportLab paragraph styles. Called only from within PDF functions."""
+    from reportlab.lib import colors  # noqa: PLC0415
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle  # noqa: PLC0415
+    from reportlab.lib.enums import TA_CENTER  # noqa: PLC0415
+
     styles = getSampleStyleSheet()
     styles.add(ParagraphStyle(
         name="InfecSureTitle",
@@ -89,7 +66,16 @@ def generate_executive_pdf(
     Generate an Executive Summary PDF report.
     Returns raw PDF bytes.
     """
-    if not REPORTLAB_AVAILABLE:
+    # ── Lazy imports — only loaded when this function is called ────────────
+    try:
+        from reportlab.lib import colors  # noqa: PLC0415
+        from reportlab.lib.pagesizes import A4  # noqa: PLC0415
+        from reportlab.lib.units import cm  # noqa: PLC0415
+        from reportlab.platypus import (  # noqa: PLC0415
+            SimpleDocTemplate, Table, TableStyle, Paragraph,
+            Spacer, HRFlowable,
+        )
+    except ImportError:
         raise RuntimeError("ReportLab is not installed. Run: pip install reportlab")
 
     buffer = io.BytesIO()
@@ -191,7 +177,11 @@ def generate_executive_excel(
     Generate an Executive Summary Excel workbook.
     Returns raw .xlsx bytes.
     """
-    if not OPENPYXL_AVAILABLE:
+    # ── Lazy imports ───────────────────────────────────────────────────────
+    try:
+        import openpyxl  # noqa: PLC0415
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side  # noqa: PLC0415
+    except ImportError:
         raise RuntimeError("openpyxl is not installed. Run: pip install openpyxl")
 
     wb = openpyxl.Workbook()
@@ -289,9 +279,18 @@ def generate_executive_excel(
 
 # ─── Dengue PDF Report ────────────────────────────────────────────────────────
 
-def generate_dengue_pdf(alert: dict, lab_results: list[dict], generated_by: str) -> bytes:
+def generate_dengue_pdf(alert: dict, lab_results: list[dict], generated_by: str, audits: Optional[list[dict]] = None) -> bytes:
     """Generate a formatted Dengue Alert Report PDF for the Supervising Doctor."""
-    if not REPORTLAB_AVAILABLE:
+    # ── Lazy imports ───────────────────────────────────────────────────────
+    try:
+        from reportlab.lib import colors  # noqa: PLC0415
+        from reportlab.lib.pagesizes import A4  # noqa: PLC0415
+        from reportlab.lib.units import cm  # noqa: PLC0415
+        from reportlab.platypus import (  # noqa: PLC0415
+            SimpleDocTemplate, Table, TableStyle, Paragraph,
+            Spacer, HRFlowable,
+        )
+    except ImportError:
         raise RuntimeError("ReportLab is not installed.")
 
     buffer = io.BytesIO()
@@ -313,6 +312,34 @@ def generate_dengue_pdf(alert: dict, lab_results: list[dict], generated_by: str)
     story.append(Paragraph(f"Description: {alert.get('description', 'N/A')}", styles["Normal"]))
     if alert.get("icno_notes"):
         story.append(Paragraph(f"ICNO Notes: {alert['icno_notes']}", styles["Normal"]))
+    story.append(Spacer(1, 0.5*cm))
+
+    story.append(Paragraph("Related ICNO Ward Audits", styles["SectionHeader"]))
+    if audits:
+        audit_data = [["Ward", "Overall", "Hand Hygiene", "PPE", "Waste", "Environment", "Date"]]
+        for audit in audits[:20]:
+            audit_data.append([
+                audit.get("ward_id", "N/A"),
+                f"{float(audit.get('overall_compliance_score', 0) or 0):.1f}%",
+                f"{float(audit.get('hand_hygiene_score', 0) or 0):.1f}%",
+                f"{float(audit.get('ppe_score', 0) or 0):.1f}%",
+                f"{float(audit.get('waste_segregation_score', 0) or 0):.1f}%",
+                f"{float(audit.get('environmental_score', 0) or 0):.1f}%",
+                str(audit.get("created_at", audit.get("audit_date", "")))[:10],
+            ])
+        audit_table = Table(audit_data, colWidths=[3*cm, 2.2*cm, 2.5*cm, 2*cm, 2*cm, 2.5*cm, 2.5*cm])
+        audit_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#16213e")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ]))
+        story.append(audit_table)
+    else:
+        story.append(Paragraph("No related ICNO ward audits found for this period.", styles["Normal"]))
+
     story.append(Spacer(1, 0.5*cm))
 
     story.append(Paragraph("Related Lab Results", styles["SectionHeader"]))

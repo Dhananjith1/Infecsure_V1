@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
+from unittest.mock import AsyncMock, patch
 
 from app.main import app
+from app.services.auth_service import create_access_token
 
 client = TestClient(app)
 
@@ -21,14 +23,13 @@ def get_token(email: str, password: str) -> str:
     return resp.json()["access_token"]
 
 
-# Pre-login (note: these won't actually work without Firebase running,
-# but they serve as integration test templates)
+def auth_headers(uid: str, email: str, role: str) -> dict[str, str]:
+    token = create_access_token(uid, email, role)
+    return {"Authorization": f"Bearer {token}"}
 
-ICNO_CREDS = ("icno@infecsure.com", "icnoPassword123")
-SISTER_CREDS = ("matron@infecsure.com", "matronPassword123")
-LAB_CREDS = ("lab@infecsure.com", "labPassword123")
-DOCTOR_CREDS = ("doctor@infecsure.com", "doctorPassword123")
-STAFF_CREDS = ("staff@infecsure.com", "staffPassword123")
+
+# Live email/password login tests require Firebase credentials and are kept out
+# of this local unit suite.
 
 
 # ─── Health Check ─────────────────────────────────────────────────────────────
@@ -57,10 +58,73 @@ class TestAuth:
         assert resp.status_code == 422  # Validation error
 
     def test_login_unknown_email(self):
-        resp = client.post("/auth/login", json={
-            "email": "unknown@example.com", "password": "wrongpass"
-        })
+        with patch(
+            "app.services.auth_service.firebase_sign_in",
+            new=AsyncMock(side_effect=ValueError("EMAIL_NOT_FOUND")),
+        ):
+            resp = client.post("/auth/login", json={
+                "email": "unknown@example.com", "password": "wrongpass"
+            })
         assert resp.status_code == 401
+
+    def test_login_success_uses_json_body_firebase_and_firestore_uid_profile(self):
+        with patch(
+            "app.services.auth_service.firebase_sign_in",
+            new=AsyncMock(return_value={"localId": "firebase-uid-1"}),
+        ), patch(
+            "app.services.firebase_service.get_user_by_uid",
+            return_value={
+                "uid": "firebase-uid-1",
+                "email": "icno@infecsure.com",
+                "role": "icno",
+                "is_active": True,
+            },
+        ):
+            resp = client.post(
+                "/auth/login",
+                json={"email": "icno@infecsure.com", "password": "real-password"},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["uid"] == "firebase-uid-1"
+        assert data["role"] == "icno"
+        assert data["token_type"] == "bearer"
+        assert data["access_token"]
+        assert data["refresh_token"]
+
+    def test_login_requires_firestore_uid_or_email_profile(self):
+        with patch(
+            "app.services.auth_service.firebase_sign_in",
+            new=AsyncMock(return_value={"localId": "missing-profile-uid"}),
+        ), patch("app.services.firebase_service.get_user_by_uid", return_value=None), \
+             patch("app.services.firebase_service.get_user_by_email", return_value=None):
+            resp = client.post(
+                "/auth/login",
+                json={"email": "doctor@infecsure.com", "password": "real-password"},
+            )
+
+        assert resp.status_code == 403
+        assert "users/missing-profile-uid" in resp.json()["detail"]
+
+    def test_login_openapi_expects_json_body(self):
+        schema = client.get("/openapi.json").json()
+        request_body = schema["paths"]["/auth/login"]["post"]["requestBody"]
+        assert "application/json" in request_body["content"]
+
+    def test_role_resolution_requires_profile_or_custom_claim(self):
+        from app.services.auth_service import role_from_authenticated_user
+
+        with patch("app.services.auth_service.auth_client.get_user", side_effect=Exception("missing")):
+            assert role_from_authenticated_user(None, "uid-1") is None
+
+    def test_role_resolution_accepts_custom_claim(self):
+        from types import SimpleNamespace
+        from app.services.auth_service import role_from_authenticated_user
+
+        fb_user = SimpleNamespace(custom_claims={"role": "doctor"})
+        with patch("app.services.auth_service.auth_client.get_user", return_value=fb_user):
+            assert role_from_authenticated_user(None, "uid-1") == "doctor"
 
     def test_me_without_token(self):
         resp = client.get("/auth/me")
@@ -82,21 +146,74 @@ class TestRBAC:
 
     def test_unauthenticated_cannot_create_ward(self):
         resp = client.post("/wards/", json={
-            "name": "Test Ward", "ward_type": "general", "bed_count": 20
+            "name": "Male Ward", "ward_type": "male_ward", "bed_count": 20
         })
         assert resp.status_code == 401
 
     def test_staff_cannot_access_alerts(self):
         """Staff should get 403 when accessing alerts."""
-        # Mock a staff token for this test (requires Firebase running)
-        pass  # Integration test — requires live Firebase
+        resp = client.get(
+            "/alerts/",
+            headers=auth_headers("staff-test", "staff@infecsure.com", "staff"),
+        )
+        assert resp.status_code == 403
 
     def test_lab_cannot_create_ward(self):
         """Lab staff should not be able to create wards."""
-        pass  # Integration test — requires live Firebase
+        resp = client.post(
+            "/wards/",
+            json={"name": "Male Ward", "ward_type": "male_ward", "bed_count": 20},
+            headers=auth_headers("lab-test", "lab@infecsure.com", "lab"),
+        )
+        assert resp.status_code == 403
 
 
 # ─── ML Service Unit Tests ────────────────────────────────────────────────────
+
+class TestHospitalLocations:
+    def test_only_six_hospital_locations_are_allowed(self):
+        from app.models.ward import ALLOWED_HOSPITAL_LOCATIONS, WardCreate
+
+        expected = {
+            "ETU": "etu",
+            "Male Ward": "male_ward",
+            "Female Ward": "female_ward",
+            "OPD": "opd",
+            "Family Medical Clinic": "family_medical_clinic",
+            "Psychiatrist Clinic": "psychiatrist_clinic",
+        }
+        actual = {
+            name: ward_type.value
+            for name, ward_type in ALLOWED_HOSPITAL_LOCATIONS.items()
+        }
+        assert actual == expected
+
+        for name, ward_type in expected.items():
+            location = WardCreate(name=name)
+            assert location.name == name
+            assert location.ward_type == ward_type
+
+    def test_unknown_hospital_location_is_rejected(self):
+        from app.models.ward import WardCreate
+
+        with pytest.raises(Exception):
+            WardCreate(name="ICU", ward_type="icu", bed_count=10)
+
+    def test_firestore_ward_list_filters_unwanted_locations(self):
+        from app.services import firebase_service as fs
+
+        with patch(
+            "app.services.firebase_service.list_collection",
+            return_value=[
+                {"ward_id": "icu", "name": "ICU"},
+                {"ward_id": "etu", "name": "ETU"},
+                {"ward_id": "male_ward", "name": "Male Ward"},
+            ],
+        ):
+            wards = fs.list_wards()
+
+        assert [ward["ward_id"] for ward in wards] == ["etu", "male_ward"]
+
 
 class TestMLService:
     """Unit tests for ML algorithms — mocked Firestore."""
@@ -156,6 +273,48 @@ class TestMLService:
             assert result["average_compliance"] == 100.0
             assert result["pending_alerts"] == 0
 
+    def test_heuristic_risk_score_is_probability(self):
+        from app.services.ml_service import _heuristic_fallback_risk
+
+        with patch("app.services.firebase_service.get_ward", return_value={"compliance_score": 40.0}), \
+             patch("app.services.firebase_service.update_ward_risk", return_value=None):
+            result = _heuristic_fallback_risk("male_ward")
+            assert result["risk_score"] == 0.6
+            assert result["risk_score_percent"] == 60.0
+            assert result["risk_level"] == "high"
+
+
+class TestAuditScoring:
+    def test_audit_calculators_return_ratios(self):
+        from app.services.audit_service import (
+            hand_hygiene_ratio,
+            ppe_adherence_ratio,
+            waste_segregation_ratio,
+        )
+
+        assert hand_hygiene_ratio(8, 10) == 0.8
+        assert ppe_adherence_ratio(3, 4) == 0.75
+        assert waste_segregation_ratio(2, 10) == 0.8
+
+    def test_sync_payload_converts_to_audit_scores(self):
+        from app.models.audit import AuditMetricCounts, AuditSyncItem, WasteSegregationCounts
+        from app.services.audit_service import build_audit_from_sync
+
+        audit, metrics = build_audit_from_sync(
+            AuditSyncItem(
+                ward_id="male_ward",
+                hand_hygiene=AuditMetricCounts(correct=9, total=10),
+                ppe_adherence=AuditMetricCounts(correct=4, total=5),
+                waste_segregation=WasteSegregationCounts(misplaced_items=1, total_items=10),
+                environmental_score=70.0,
+            )
+        )
+        assert audit.hand_hygiene_score == 90.0
+        assert audit.ppe_score == 80.0
+        assert audit.waste_segregation_score == 90.0
+        assert audit.is_offline_sync is True
+        assert metrics["hand_hygiene_ratio"] == 0.9
+
 
 # ─── Pydantic Model Tests ─────────────────────────────────────────────────────
 
@@ -198,6 +357,12 @@ class TestModels:
         assert UserRole.ICNO == "icno"
         assert UserRole.STAFF == "staff"
 
+    def test_pathogen_clinical_risk_class_is_mapped(self):
+        from app.models.pathogen import PathogenCreate
+
+        pathogen = PathogenCreate(name="Dengue", category="virus", risk_level="high")
+        assert pathogen.clinical_risk_class == 3
+
 
 # ─── OCR Service Tests ────────────────────────────────────────────────────────
 
@@ -238,3 +403,63 @@ class TestEmailService:
         result = send_moh_notification("test@example.com", "Test", "<p>Test</p>")
         # Will be False because smtp credentials not set
         assert isinstance(result, bool)
+
+
+class TestRouteContracts:
+    def test_expected_checklist_routes_exist(self):
+        route_paths = set(app.openapi()["paths"])
+        expected = {
+            "/auth/login",
+            "/audits/sync",
+            "/ocr/upload",
+            "/ocr/pending",
+            "/lab/pathogens",
+            "/lab/volume/48h",
+            "/gate/pending",
+            "/gate/validate",
+            "/alerts/pending",
+            "/alerts/{alert_id}/acknowledge",
+            "/alerts/{alert_id}/instructions",
+            "/public/heatmap",
+            "/health",
+        }
+        assert expected.issubset(route_paths)
+
+    def test_public_heatmap_uses_only_approved_alerts(self):
+        with patch("app.services.firebase_service.list_wards", return_value=[
+            {"ward_id": "male_ward", "name": "Male Ward", "risk_level": "high", "risk_score": 0.9},
+            {"ward_id": "female_ward", "name": "Female Ward", "risk_level": "critical", "risk_score": 1.0},
+        ]), patch("app.services.firebase_service.list_alerts", side_effect=[
+            [{"ward_id": "male_ward", "status": "approved"}],
+            [],
+        ]):
+            resp = client.get("/public/heatmap")
+        assert resp.status_code == 200
+        data = resp.json()["heatmap"]
+        male = next(item for item in data if item["ward_id"] == "male_ward")
+        female = next(item for item in data if item["ward_id"] == "female_ward")
+        assert male["status"] == "red"
+        assert female["status"] == "green"
+
+    def test_ocr_pending_filters_low_confidence_records(self):
+        with patch("app.services.firebase_service.list_ocr_queue", return_value=[
+            {"scan_id": "high-confidence", "low_confidence_count": 0},
+            {"scan_id": "needs-review", "low_confidence_count": 2},
+        ]):
+            resp = client.get(
+                "/ocr/pending",
+                headers=auth_headers("icno-test", "icno@infecsure.com", "icno"),
+            )
+        assert resp.status_code == 200
+        assert [item["scan_id"] for item in resp.json()] == ["needs-review"]
+
+    def test_gate_validate_approves_pending_alert(self):
+        with patch("app.services.firebase_service.get_alert", return_value={"alert_id": "a1", "status": "pending"}), \
+             patch("app.services.firebase_service.validate_alert", return_value=None):
+            resp = client.post(
+                "/gate/validate",
+                json={"alert_id": "a1", "decision": "approve", "icno_notes": "checked"},
+                headers=auth_headers("icno-test", "icno@infecsure.com", "icno"),
+            )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "approved"
