@@ -35,6 +35,7 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     """Startup: seed default users. Shutdown: (nothing extra needed)."""
     logger.info("🚀 InfecSure backend starting up...")
+    logger.info(f"Loaded CORS origins: {settings.cors_origins}")
     try:
         await seed_default_users()
     except Exception as e:

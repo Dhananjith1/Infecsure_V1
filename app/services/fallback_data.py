@@ -5,7 +5,14 @@ from typing import Any
 
 def is_quota_error(exc: Exception) -> bool:
     text = f"{type(exc).__name__} {exc}".lower()
-    return "resourceexhausted" in text or "quota exceeded" in text or "429" in text
+    return (
+        "resourceexhausted" in text 
+        or "quota exceeded" in text 
+        or "429" in text
+        or "service account" in text
+        or "credentials" in text
+        or "not found" in text
+    )
 
 
 WARDS: list[dict[str, Any]] = [
