@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.services import firebase_service as fs
+from app.services import fallback_data, firebase_service as fs
 
 router = APIRouter(prefix="/public", tags=["Public Access"])
 
@@ -26,8 +26,13 @@ async def public_heatmap():
     Return ward risk statuses for general awareness using only ICNO-approved
     or dispatched alerts as publication evidence.
     """
-    wards = fs.list_wards()
-    approved_alerts = fs.list_alerts(status="approved", limit=200) + fs.list_alerts(status="dispatched", limit=200)
+    try:
+        wards = fs.list_wards()
+        approved_alerts = fs.list_alerts(status="approved", limit=50) + fs.list_alerts(status="dispatched", limit=50)
+    except Exception as exc:
+        if fallback_data.is_quota_error(exc):
+            return {"heatmap": fallback_data.heatmap(public_mode=True), "fallback_reason": "Firestore quota exceeded"}
+        raise
     approved_by_ward = {}
     for alert in approved_alerts:
         ward_id = alert.get("ward_id")

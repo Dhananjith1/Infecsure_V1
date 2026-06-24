@@ -11,6 +11,7 @@ from typing import Any, Optional
 from pydantic import BaseModel
 
 
+
 class AlertType(str, Enum):
     ANOMALY = "anomaly"
     OUTBREAK_RISK = "outbreak_risk"

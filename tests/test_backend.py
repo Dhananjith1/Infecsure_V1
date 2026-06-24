@@ -93,11 +93,12 @@ class TestAuth:
         assert data["access_token"]
         assert data["refresh_token"]
 
-    def test_login_requires_firestore_uid_profile(self):
+    def test_login_requires_firestore_uid_or_email_profile(self):
         with patch(
             "app.services.auth_service.firebase_sign_in",
             new=AsyncMock(return_value={"localId": "missing-profile-uid"}),
-        ), patch("app.services.firebase_service.get_user_by_uid", return_value=None):
+        ), patch("app.services.firebase_service.get_user_by_uid", return_value=None), \
+             patch("app.services.firebase_service.get_user_by_email", return_value=None):
             resp = client.post(
                 "/auth/login",
                 json={"email": "doctor@infecsure.com", "password": "real-password"},
@@ -406,7 +407,7 @@ class TestEmailService:
 
 class TestRouteContracts:
     def test_expected_checklist_routes_exist(self):
-        route_paths = {route.path for route in app.routes}
+        route_paths = set(app.openapi()["paths"])
         expected = {
             "/auth/login",
             "/audits/sync",

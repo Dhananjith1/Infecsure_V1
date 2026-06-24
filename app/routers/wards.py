@@ -89,6 +89,8 @@ async def get_ward_audits(ward_id: str, _: TokenData = _ALL_AUTH):
 async def get_ward_lab_results(ward_id: str, current_user: TokenData = Depends(get_current_user)):
     """Returns lab results for a ward. Staff role sees masked data."""
     results = fs.list_lab_results(ward_id=ward_id)
+    if current_user.role == UserRole.LAB.value:
+        results = [r for r in results if r.get("entered_by_uid") == current_user.uid]
     if current_user.role == UserRole.STAFF.value:
         # Mask patient identifiers
         for r in results:

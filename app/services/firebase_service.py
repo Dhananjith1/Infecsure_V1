@@ -9,12 +9,16 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timedelta, timezone
+from time import monotonic
 from typing import Any, Optional
 
 from google.cloud.firestore_v1 import DocumentSnapshot
 
 from app.config import db
 from app.models.ward import ALLOWED_WARD_IDS, normalize_ward_name, ward_type_for_name
+
+FIRESTORE_LIST_CACHE_SECONDS = 45
+_LIST_CACHE: dict[tuple, tuple[float, list[dict]]] = {}
 
 
 # ─── Generic Helpers ──────────────────────────────────────────────────────────
@@ -36,6 +40,15 @@ def _doc_to_dict(doc: DocumentSnapshot) -> Optional[dict]:
     return data
 
 
+def _cache_key(collection: str, filters: Optional[list[tuple]], order_by: Optional[str], limit: int) -> tuple:
+    return collection, tuple(filters or []), order_by, limit
+
+
+def _clear_collection_cache(collection: str) -> None:
+    for key in [key for key in _LIST_CACHE if key[0] == collection]:
+        _LIST_CACHE.pop(key, None)
+
+
 # ─── Generic CRUD ─────────────────────────────────────────────────────────────
 
 def create_document(collection: str, data: dict, doc_id: Optional[str] = None) -> str:
@@ -44,6 +57,7 @@ def create_document(collection: str, data: dict, doc_id: Optional[str] = None) -
         doc_id = _new_id()
     data["created_at"] = _now()
     db.collection(collection).document(doc_id).set(data)
+    _clear_collection_cache(collection)
     return doc_id
 
 
@@ -55,10 +69,12 @@ def get_document(collection: str, doc_id: str) -> Optional[dict]:
 def update_document(collection: str, doc_id: str, data: dict) -> None:
     data["updated_at"] = _now()
     db.collection(collection).document(doc_id).update(data)
+    _clear_collection_cache(collection)
 
 
 def delete_document(collection: str, doc_id: str) -> None:
     db.collection(collection).document(doc_id).delete()
+    _clear_collection_cache(collection)
 
 
 def list_collection(
@@ -71,6 +87,11 @@ def list_collection(
     List documents from a collection with optional filters.
     filters: list of (field, operator, value) tuples
     """
+    key = _cache_key(collection, filters, order_by, limit)
+    cached = _LIST_CACHE.get(key)
+    if cached and monotonic() - cached[0] < FIRESTORE_LIST_CACHE_SECONDS:
+        return [dict(item) for item in cached[1]]
+
     ref = db.collection(collection)
     if filters:
         for field, op, value in filters:
@@ -84,6 +105,7 @@ def list_collection(
         d = _doc_to_dict(doc)
         if d:
             result.append(d)
+    _LIST_CACHE[key] = (monotonic(), [dict(item) for item in result])
     return result
 
 
@@ -129,7 +151,13 @@ def get_ward_by_name(name: str) -> Optional[dict]:
 
 def list_wards() -> list[dict]:
     wards = list_collection("wards", order_by="name", limit=100)
-    return [ward for ward in wards if ward.get("ward_id") in ALLOWED_WARD_IDS or ward.get("_id") in ALLOWED_WARD_IDS]
+    allowed_wards = []
+    for ward in wards:
+        ward_id = ward.get("ward_id") or ward.get("_id")
+        if ward_id in ALLOWED_WARD_IDS:
+            ward["ward_id"] = ward_id
+            allowed_wards.append(ward)
+    return allowed_wards
 
 
 def update_ward_risk(ward_id: str, risk_score: float, risk_level: str, compliance_score: float) -> None:
@@ -181,7 +209,7 @@ def list_lab_results(ward_id: Optional[str] = None, limit: int = 100) -> list[di
 
 def count_positive_cultures_48h(ward_id: str, pathogen_id: Optional[str] = None) -> int:
     cutoff = _now() - timedelta(hours=48)
-    results = list_lab_results(ward_id=ward_id, limit=500)
+    results = list_lab_results(ward_id=ward_id, limit=50)
     count = 0
     for result in results:
         created_at = result.get("created_at")
@@ -224,6 +252,7 @@ def upsert_pathogen_stats(pathogen_id: str, mean: float, std: float, count: int)
         "count": count,
         "updated_at": _now(),
     }, merge=True)
+    _clear_collection_cache("pathogen_stats")
 
 
 # ─── Domain: Pathogens ────────────────────────────────────────────────────────
@@ -298,6 +327,7 @@ def acknowledge_alert_with_instructions(
         "created_at": _now(),
     }
     db.collection("management_instructions").document(instruction_id).set(instruction)
+    _clear_collection_cache("management_instructions")
     update_document("alerts", alert_id, {
         "doctor_acknowledged_at": _now(),
         "doctor_acknowledged_by_uid": doctor_uid,
@@ -346,7 +376,7 @@ def list_ocr_queue(status: str = "pending_review") -> list[dict]:
 # ─── Domain: Reports ─────────────────────────────────────────────────────────
 
 def create_report_record(data: dict) -> str:
-    report_id = _new_id()
+    report_id = data.get("report_id") or _new_id()
     data["report_id"] = report_id
     return create_document("reports", data, doc_id=report_id)
 

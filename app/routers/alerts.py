@@ -18,7 +18,7 @@ from app.dependencies import get_current_user, require_role
 from app.models.alert import Alert, DoctorInstructionRequest, RejectAlertRequest, ValidateAlertRequest
 from app.models.auth import TokenData
 from app.models.user import UserRole
-from app.services import email_service, firebase_service as fs, ml_service
+from app.services import email_service, fallback_data, firebase_service as fs, ml_service
 
 router = APIRouter(prefix="/alerts", tags=["Alerts & Validation Gate"])
 
@@ -32,6 +32,7 @@ _ICNO_SISTER_DOCTOR = Depends(require_role(UserRole.ICNO, UserRole.SISTER, UserR
 @router.get("/", summary="List alerts")
 async def list_alerts(
     alert_status: str = None,
+    limit: int = 50,
     current_user: TokenData = _ALL_AUTH,
 ):
     """
@@ -43,6 +44,7 @@ async def list_alerts(
     - **Lab**: Not accessible (403)
     """
     role = current_user.role
+    bounded_limit = min(max(limit, 1), 100)
 
     if role == UserRole.STAFF.value:
         raise HTTPException(status_code=403, detail="Staff cannot access alerts.")
@@ -51,13 +53,31 @@ async def list_alerts(
 
     if role == UserRole.ICNO.value:
         # ICNO sees everything, can filter by status
-        alerts = fs.list_alerts(status=alert_status)
+        try:
+            alerts = fs.list_alerts(status=alert_status, limit=bounded_limit)
+        except Exception as exc:
+            if fallback_data.is_quota_error(exc):
+                alerts = [a for a in fallback_data.ALERTS if not alert_status or a.get("status") == alert_status][:bounded_limit]
+            else:
+                raise
     elif role == UserRole.SISTER.value:
         # Sister sees only approved
-        alerts = fs.list_alerts(status="approved")
+        try:
+            alerts = fs.list_alerts(status="approved", limit=bounded_limit)
+        except Exception as exc:
+            if fallback_data.is_quota_error(exc):
+                alerts = [a for a in fallback_data.ALERTS if a.get("status") == "approved"][:bounded_limit]
+            else:
+                raise
     elif role == UserRole.DOCTOR.value:
         # Doctor sees approved alerts targeting them
-        alerts = fs.list_alerts(status="approved")
+        try:
+            alerts = fs.list_alerts(status="approved", limit=bounded_limit)
+        except Exception as exc:
+            if fallback_data.is_quota_error(exc):
+                alerts = [a for a in fallback_data.ALERTS if a.get("status") == "approved"][:bounded_limit]
+            else:
+                raise
         alerts = [
             a for a in alerts
             if "doctor" in a.get("target_roles", []) or "icno" not in a.get("target_roles", [])
@@ -70,28 +90,44 @@ async def list_alerts(
 
 @router.get("/pending", summary="List pending alerts for ICNO validation")
 async def list_pending_alerts(_: TokenData = _ICNO_ONLY):
-    return fs.list_alerts(status="pending", limit=200)
+    try:
+        return fs.list_alerts(status="pending", limit=200)
+    except Exception as exc:
+        if fallback_data.is_quota_error(exc):
+            return [a for a in fallback_data.ALERTS if a.get("status") == "pending"]
+        raise
 
 
 @router.get("/analytics/dashboard", summary="Dashboard summary (ICNO / Sister)")
 async def get_dashboard(_: TokenData = _ICNO_OR_SISTER):
     """Returns aggregate hospital statistics for the ICNO/Matron dashboard."""
-    return ml_service.get_dashboard_summary()
+    try:
+        return ml_service.get_dashboard_summary()
+    except Exception as exc:
+        if fallback_data.is_quota_error(exc):
+            return fallback_data.dashboard_summary()
+        raise
 
 
-@router.get("/analytics/root-cause", summary="Apriori Root Cause Analysis (ICNO only)")
+@router.get("/analytics/root-cause", summary="Apriori Root Cause Analysis (ICNO / Sister)")
 async def get_root_cause(
     min_support: float = 0.1,
     min_confidence: float = 0.5,
     min_lift: float = 1.0,
-    _: TokenData = _ICNO_ONLY,
+    max_rules: int = 25,
+    _: TokenData = _ICNO_OR_SISTER,
 ):
     """
     Run the Apriori algorithm to mine association rules between
     audit failures and pathogen detections.
     Returns sorted association rules with human-readable interpretations.
     """
-    return ml_service.find_root_cause_associations(min_support, min_confidence, min_lift)
+    try:
+        return ml_service.find_root_cause_associations(min_support, min_confidence, min_lift, max_rules)
+    except Exception as exc:
+        if fallback_data.is_quota_error(exc):
+            return fallback_data.ROOT_CAUSE_RULES[:max_rules]
+        raise
 
 
 @router.get("/management-instructions", summary="List doctor management instructions")

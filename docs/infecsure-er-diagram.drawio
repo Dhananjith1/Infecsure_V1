@@ -1,0 +1,115 @@
+<mxfile host="app.diagrams.net" agent="Codex">
+  <diagram id="infecsure-er" name="InfecSure ER Diagram">
+    <mxGraphModel dx="2440" dy="1130" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1400" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=24;fontStyle=1;fontColor=#1f2937;" value="InfecSure Firestore Logical ER Diagram" vertex="1">
+          <mxGeometry height="40" width="680" x="560" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="note" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=13;fontColor=#4b5563;" value="Reduced ER view: only required/core attributes and relationship-linking fields are shown. Firestore document IDs act as primary keys." vertex="1">
+          <mxGeometry height="30" width="900" x="450" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="users" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8f1ff;strokeColor=#2b579a;fontColor=#111827;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;b&gt;USERS&lt;/b&gt;&lt;hr&gt;uid PK&lt;br&gt;email&lt;br&gt;full_name&lt;br&gt;role&lt;br&gt;is_active" vertex="1">
+          <mxGeometry height="190" width="230" x="70" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="wards" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e7f7ef;strokeColor=#2f855a;fontColor=#111827;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;b&gt;WARDS&lt;/b&gt;&lt;hr&gt;ward_id PK&lt;br&gt;name&lt;br&gt;ward_type&lt;br&gt;risk_level&lt;br&gt;risk_score&lt;br&gt;compliance_score" vertex="1">
+          <mxGeometry height="250" width="250" x="380" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="pathogens" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff4df;strokeColor=#c27803;fontColor=#111827;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;b&gt;PATHOGENS&lt;/b&gt;&lt;hr&gt;pathogen_id PK&lt;br&gt;name&lt;br&gt;category&lt;br&gt;risk_level" vertex="1">
+          <mxGeometry height="190" width="250" x="775" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="pathogen_stats" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff4df;strokeColor=#c27803;fontColor=#111827;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;b&gt;PATHOGEN_STATS&lt;/b&gt;&lt;hr&gt;pathogen_id PK/FK&lt;br&gt;mean&lt;br&gt;std&lt;br&gt;count" vertex="1">
+          <mxGeometry height="150" width="250" x="1400" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="audits" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f3f4f6;strokeColor=#4b5563;fontColor=#111827;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;b&gt;AUDITS&lt;/b&gt;&lt;hr&gt;audit_id PK&lt;br&gt;ward_id FK&lt;br&gt;conducted_by_uid FK&lt;br&gt;overall_compliance_score&lt;br&gt;ocr_scan_id FK&lt;br&gt;created_at" vertex="1">
+          <mxGeometry height="270" width="260" x="70" y="460" as="geometry" />
+        </mxCell>
+        <mxCell id="lab_results" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f3f4f6;strokeColor=#4b5563;fontColor=#111827;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;b&gt;LAB_RESULTS&lt;/b&gt;&lt;hr&gt;result_id PK&lt;br&gt;ward_id FK&lt;br&gt;pathogen_id FK&lt;br&gt;entered_by_uid FK&lt;br&gt;result_date&lt;br&gt;anomaly&lt;br&gt;ocr_scan_id FK" vertex="1">
+          <mxGeometry height="270" width="260" x="400" y="450" as="geometry" />
+        </mxCell>
+        <mxCell id="alerts" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe8e8;strokeColor=#c53030;fontColor=#111827;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;b&gt;ALERTS&lt;/b&gt;&lt;hr&gt;alert_id PK&lt;br&gt;ward_id FK&lt;br&gt;validated_by_uid FK&lt;br&gt;alert_type&lt;br&gt;severity&lt;br&gt;status&lt;br&gt;source_data" vertex="1">
+          <mxGeometry height="270" width="260" x="1150" y="340" as="geometry" />
+        </mxCell>
+        <mxCell id="management_instructions" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe8e8;strokeColor=#c53030;fontColor=#111827;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;b&gt;MANAGEMENT_INSTRUCTIONS&lt;/b&gt;&lt;hr&gt;instruction_id PK&lt;br&gt;alert_id FK&lt;br&gt;doctor_uid FK&lt;br&gt;management_instructions&lt;br&gt;follow_up_required" vertex="1">
+          <mxGeometry height="190" width="290" x="1320" y="800" as="geometry" />
+        </mxCell>
+        <mxCell id="ocr_queue" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#6b46c1;fontColor=#111827;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;b&gt;OCR_QUEUE&lt;/b&gt;&lt;hr&gt;scan_id PK&lt;br&gt;created_by_uid FK&lt;br&gt;form_type&lt;br&gt;status&lt;br&gt;reference_id" vertex="1">
+          <mxGeometry height="220" width="260" x="60" y="1060" as="geometry" />
+        </mxCell>
+        <mxCell id="reports" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#111827;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;b&gt;REPORTS&lt;/b&gt;&lt;hr&gt;report_id PK&lt;br&gt;generated_by_uid FK&lt;br&gt;linked_alert_id FK&lt;br&gt;report_type&lt;br&gt;format&lt;br&gt;download_url" vertex="1">
+          <mxGeometry height="200" width="260" x="620" y="740" as="geometry" />
+        </mxCell>
+        <mxCell id="notices" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ecfccb;strokeColor=#65a30d;fontColor=#111827;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;b&gt;NOTICES&lt;/b&gt;&lt;hr&gt;notice_id PK&lt;br&gt;posted_by_uid FK&lt;br&gt;title&lt;br&gt;body&lt;br&gt;expires_at" vertex="1">
+          <mxGeometry height="180" width="260" x="910" y="770" as="geometry" />
+        </mxCell>
+        <mxCell id="moh_notifications" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#d97706;fontColor=#111827;align=left;verticalAlign=top;spacing=8;fontSize=12;" value="&lt;b&gt;MOH_NOTIFICATIONS&lt;/b&gt;&lt;hr&gt;notification_id PK&lt;br&gt;ward_id FK&lt;br&gt;ocr_scan_id FK&lt;br&gt;committed_by_uid FK&lt;br&gt;disease&lt;br&gt;severity" vertex="1">
+          <mxGeometry height="200" width="280" x="1490" y="1120" as="geometry" />
+        </mxCell>
+        <mxCell id="e_users_audits" edge="1" parent="1" source="users" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#6b7280;fontSize=11;" target="audits" value="conducts">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_users_lab" edge="1" parent="1" source="users" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#6b7280;fontSize=11;" target="lab_results" value="enters">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_users_alerts" edge="1" parent="1" source="users" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#6b7280;fontSize=11;" target="alerts" value="validates">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_users_instructions" edge="1" parent="1" source="users" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#6b7280;fontSize=11;" target="management_instructions" value="writes">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_users_ocr" edge="1" parent="1" source="users" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#6b7280;fontSize=11;" target="ocr_queue" value="creates">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_users_reports" edge="1" parent="1" source="users" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#6b7280;fontSize=11;" target="reports" value="generates">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_users_notices" edge="1" parent="1" source="users" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#6b7280;fontSize=11;" target="notices" value="posts">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_users_moh" edge="1" parent="1" source="users" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#6b7280;fontSize=11;" target="moh_notifications" value="commits">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_wards_audits" edge="1" parent="1" source="wards" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#2f855a;fontSize=11;" target="audits" value="has">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_wards_lab" edge="1" parent="1" source="wards" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#2f855a;fontSize=11;" target="lab_results" value="has">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_wards_alerts" edge="1" parent="1" source="wards" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#2f855a;fontSize=11;" target="alerts" value="receives">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_wards_moh" edge="1" parent="1" source="wards" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#2f855a;fontSize=11;" target="moh_notifications" value="linked_to">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_pathogens_lab" edge="1" parent="1" source="pathogens" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#c27803;fontSize=11;" target="lab_results" value="appears_in">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_pathogens_stats" edge="1" parent="1" source="pathogens" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=ERone;startArrow=ERone;endFill=0;startFill=0;strokeColor=#c27803;fontSize=11;" target="pathogen_stats" value="has_stats">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_audits_alerts" edge="1" parent="1" source="audits" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#c53030;fontSize=11;" target="alerts" value="may_trigger">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_lab_alerts" edge="1" parent="1" source="lab_results" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#c53030;fontSize=11;" target="alerts" value="may_trigger">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_alerts_instructions" edge="1" parent="1" source="alerts" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#c53030;fontSize=11;" target="management_instructions" value="has">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_alerts_reports" edge="1" parent="1" source="alerts" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#c53030;fontSize=11;" target="reports" value="may_generate">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_ocr_audits" edge="1" parent="1" source="ocr_queue" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#6b46c1;fontSize=11;" target="audits" value="may_commit_to">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_ocr_lab" edge="1" parent="1" source="ocr_queue" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#6b46c1;fontSize=11;" target="lab_results" value="may_commit_to">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_ocr_moh" edge="1" parent="1" source="ocr_queue" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#6b46c1;fontSize=11;" target="moh_notifications" value="may_commit_to">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

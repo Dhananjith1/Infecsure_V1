@@ -58,19 +58,20 @@ def create_lab_result(
         raise ValueError("Pathogen not found.")
 
     user_name = _user_name(entered_by_uid, entered_by_email)
-    colony_count = body.colony_count or 1
+    colony_count = body.colony_count if body.colony_count is not None else 1
     anomaly = ml_service.detect_anomaly(body.pathogen_id, colony_count)
 
     data = body.model_dump(mode="json")
     data["entered_by_uid"] = entered_by_uid
     data["entered_by_name"] = user_name
+    data["status"] = "pending"
     data["anomaly"] = anomaly
     data["source"] = source
     data["clinical_risk_class"] = pathogen.get("clinical_risk_class")
     data["positive_culture_count_48h"] = fs.count_positive_cultures_48h(
         body.ward_id,
         body.pathogen_id,
-    ) + 1
+    ) + (1 if colony_count > 0 else 0)
     if ocr_scan_id:
         data["ocr_scan_id"] = ocr_scan_id
 
@@ -98,6 +99,15 @@ def create_lab_result(
 
     return {
         "result_id": result_id,
+        "status": "pending",
+        "ward_id": body.ward_id,
+        "pathogen_id": body.pathogen_id,
+        "pathogen_name": body.pathogen_name,
+        "specimen_type": body.specimen_type,
+        "test_result": body.test_result,
+        "result_date": data["result_date"],
+        "patient_ward_location": body.patient_ward_location,
+        "colony_count": colony_count,
         "anomaly": anomaly,
         "alert_id": alert_id,
         "risk_prediction": risk_prediction,

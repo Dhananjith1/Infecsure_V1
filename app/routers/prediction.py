@@ -8,6 +8,7 @@ import numpy as np
 from app.dependencies import get_current_user, require_role
 from app.models.auth import TokenData
 from app.models.user import UserRole
+import json
 
 router = APIRouter(prefix="/ai-engine", tags=["Outbreak Prediction"])
 
@@ -40,9 +41,7 @@ class WardPredictionRequest(BaseModel):
     days_since_last_audit: int
 
 # 2. මෙන්න මෙතන තමයි මැජික් එක! 
-# Depends(get_current_user) දැම්මම Dummy Tokens සේරම එලවලා දානවා. 
-# ඔයාට ඕන නම් මේක Depends(require_role([UserRole.ICNO])) විදියට දීලා ICNO ට විතරක් බලන්න පුළුවන් වෙන්න හදන්නත් පුළුවන්.
-#dan icno withrai puluwan
+# ICNO ට විතරක් බලන්න පුළුවන් වෙන්න Role-based access හදලා තියෙන්නේ.
 @router.post("/{ward_id}/predict", dependencies=[Depends(require_role(UserRole.ICNO))])
 async def predict_ward_risk(ward_id: str, data: WardPredictionRequest):
     if ward_id not in ALLOWED_WARDS:
@@ -76,4 +75,50 @@ async def predict_ward_risk(ward_id: str, data: WardPredictionRequest):
         "risk_score": risk_score,
         "risk_level": "High" if risk_score > 0.7 else "Medium" if risk_score > 0.4 else "Low",
         "message": "Outbreak prediction calculated successfully using Random Forest Model."
+    }
+
+# 3. Model Evaluation Metrics API (LIVE Calculation)
+# =====================================================================
+@router.get("/metrics", summary="Get ML Model Evaluation Metrics")
+async def get_evaluation_metrics():
+    """
+    Public API endpoint to retrieve the LIVE Machine Learning model's 
+    evaluation metrics and feature importance weights.
+    """
+    if rf_model is None:
+        raise HTTPException(
+            status_code=500, 
+            detail="ML Model is not loaded."
+        )
+
+    feature_names = [
+        "hand_hygiene_score", "ppe_score", "waste_segregation_score", 
+        "environmental_score", "recent_lab_count", "anomaly_count", 
+        "max_virulence", "days_since_last_audit"
+    ]
+    
+    importances = {
+        name: round(float(imp), 4) 
+        for name, imp in zip(feature_names, rf_model.feature_importances_)
+    }
+    
+    # Read LIVE metrics from the training output
+    live_metrics = {
+        "accuracy": "N/A", "precision": "N/A", "recall": "N/A", "f1_score": "N/A"
+    }
+    try:
+        with open("ml_models/metrics.json", "r") as f:
+            live_metrics = json.load(f)
+    except Exception:
+        pass
+    
+    return {
+        "model_status": "Active",
+        "model_type": "RandomForestClassifier",
+        "metrics": live_metrics,
+        "feature_importances": importances,
+        "hyperparameters": {
+            "n_estimators": rf_model.n_estimators,
+            "random_state": rf_model.random_state
+        }
     }

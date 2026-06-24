@@ -1,0 +1,99 @@
+<mxfile host="app.diagrams.net" modified="2026-06-17T00:00:00.000Z" agent="Codex" version="26.0.0" type="device">
+  <diagram id="infecsure-class-diagram" name="InfecSure Class Diagram">
+    <mxGraphModel dx="1600" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1900" pageHeight="1450" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="InfecSure System Class Diagram" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=26;fontStyle=1;fontColor=#111827;" vertex="1" parent="1">
+          <mxGeometry x="600" y="20" width="700" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="note" value="Logical UML class diagram for the FastAPI + Firestore InfecSure backend. Firestore documents are represented as domain model classes." style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=13;fontColor=#4b5563;" vertex="1" parent="1">
+          <mxGeometry x="450" y="65" width="1000" height="30" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="userProfile" value="&lt;b&gt;UserProfile&lt;/b&gt;&lt;hr&gt;+ uid: string&lt;br&gt;+ email: string&lt;br&gt;+ full_name: string&lt;br&gt;+ role: UserRole&lt;br&gt;+ is_active: boolean&lt;br&gt;+ created_at: datetime&lt;br&gt;+ updated_at: datetime" style="swimlane;html=1;whiteSpace=wrap;rounded=0;fillColor=#e8f1ff;strokeColor=#1d4ed8;fontColor=#111827;startSize=28;fontSize=12;align=left;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="70" y="130" width="250" height="190" as="geometry"/>
+        </mxCell>
+        <mxCell id="ward" value="&lt;b&gt;Ward&lt;/b&gt;&lt;hr&gt;+ ward_id: string&lt;br&gt;+ name: string&lt;br&gt;+ ward_type: WardType&lt;br&gt;+ bed_count: int&lt;br&gt;+ floor: string&lt;br&gt;+ risk_level: RiskLevel&lt;br&gt;+ risk_score: float&lt;br&gt;+ compliance_score: float&lt;br&gt;+ last_audit_at: datetime" style="swimlane;html=1;whiteSpace=wrap;rounded=0;fillColor=#e7f7ef;strokeColor=#15803d;fontColor=#111827;startSize=28;fontSize=12;align=left;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="390" y="130" width="270" height="220" as="geometry"/>
+        </mxCell>
+        <mxCell id="pathogen" value="&lt;b&gt;Pathogen&lt;/b&gt;&lt;hr&gt;+ pathogen_id: string&lt;br&gt;+ name: string&lt;br&gt;+ category: string&lt;br&gt;+ risk_level: PathogenRiskLevel&lt;br&gt;+ clinical_risk_class: int&lt;br&gt;+ description: string&lt;br&gt;+ typical_source: string" style="swimlane;html=1;whiteSpace=wrap;rounded=0;fillColor=#fff4df;strokeColor=#b45309;fontColor=#111827;startSize=28;fontSize=12;align=left;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="740" y="130" width="280" height="190" as="geometry"/>
+        </mxCell>
+        <mxCell id="pathogenStats" value="&lt;b&gt;PathogenStats&lt;/b&gt;&lt;hr&gt;+ pathogen_id: string&lt;br&gt;+ mean: float&lt;br&gt;+ std: float&lt;br&gt;+ count: int&lt;br&gt;+ updated_at: datetime" style="swimlane;html=1;whiteSpace=wrap;rounded=0;fillColor=#fff4df;strokeColor=#b45309;fontColor=#111827;startSize=28;fontSize=12;align=left;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="1110" y="130" width="260" height="155" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="wardAudit" value="&lt;b&gt;WardAudit&lt;/b&gt;&lt;hr&gt;+ audit_id: string&lt;br&gt;+ ward_id: string&lt;br&gt;+ conducted_by_uid: string&lt;br&gt;+ conducted_by_name: string&lt;br&gt;+ hand_hygiene_score: float&lt;br&gt;+ ppe_score: float&lt;br&gt;+ waste_segregation_score: float&lt;br&gt;+ environmental_score: float&lt;br&gt;+ overall_compliance_score: float&lt;br&gt;+ remarks: string&lt;br&gt;+ source: string&lt;br&gt;+ ocr_scan_id: string" style="swimlane;html=1;whiteSpace=wrap;rounded=0;fillColor=#f3f4f6;strokeColor=#4b5563;fontColor=#111827;startSize=28;fontSize=12;align=left;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="70" y="450" width="290" height="280" as="geometry"/>
+        </mxCell>
+        <mxCell id="labResult" value="&lt;b&gt;LabResult&lt;/b&gt;&lt;hr&gt;+ result_id: string&lt;br&gt;+ ward_id: string&lt;br&gt;+ pathogen_id: string&lt;br&gt;+ pathogen_name: string&lt;br&gt;+ specimen_type: SpecimenType&lt;br&gt;+ result_date: datetime&lt;br&gt;+ colony_count: int&lt;br&gt;+ entered_by_uid: string&lt;br&gt;+ anomaly: AnomalyFlag&lt;br&gt;+ source: string&lt;br&gt;+ ocr_scan_id: string" style="swimlane;html=1;whiteSpace=wrap;rounded=0;fillColor=#f3f4f6;strokeColor=#4b5563;fontColor=#111827;startSize=28;fontSize=12;align=left;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="430" y="450" width="290" height="265" as="geometry"/>
+        </mxCell>
+        <mxCell id="alert" value="&lt;b&gt;Alert&lt;/b&gt;&lt;hr&gt;+ alert_id: string&lt;br&gt;+ alert_type: AlertType&lt;br&gt;+ ward_id: string&lt;br&gt;+ title: string&lt;br&gt;+ description: string&lt;br&gt;+ severity: string&lt;br&gt;+ status: AlertStatus&lt;br&gt;+ source_data: object&lt;br&gt;+ validated_by_uid: string&lt;br&gt;+ icno_notes: string&lt;br&gt;+ latest_instruction_id: string" style="swimlane;html=1;whiteSpace=wrap;rounded=0;fillColor=#ffe8e8;strokeColor=#b91c1c;fontColor=#111827;startSize=28;fontSize=12;align=left;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="790" y="450" width="290" height="265" as="geometry"/>
+        </mxCell>
+        <mxCell id="managementInstruction" value="&lt;b&gt;ManagementInstruction&lt;/b&gt;&lt;hr&gt;+ instruction_id: string&lt;br&gt;+ alert_id: string&lt;br&gt;+ doctor_uid: string&lt;br&gt;+ doctor_name: string&lt;br&gt;+ acknowledgement_notes: string&lt;br&gt;+ management_instructions: string&lt;br&gt;+ follow_up_required: boolean&lt;br&gt;+ created_at: datetime" style="swimlane;html=1;whiteSpace=wrap;rounded=0;fillColor=#ffe8e8;strokeColor=#b91c1c;fontColor=#111827;startSize=28;fontSize=12;align=left;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="1150" y="450" width="320" height="220" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="ocrResult" value="&lt;b&gt;OCRResult&lt;/b&gt;&lt;hr&gt;+ scan_id: string&lt;br&gt;+ form_type: FormType&lt;br&gt;+ reference_id: string&lt;br&gt;+ raw_text: string&lt;br&gt;+ tokens: ConfidenceToken[]&lt;br&gt;+ low_confidence_count: int&lt;br&gt;+ extracted_fields: object&lt;br&gt;+ corrected_fields: object&lt;br&gt;+ created_by_uid: string&lt;br&gt;+ status: string" style="swimlane;html=1;whiteSpace=wrap;rounded=0;fillColor=#ede9fe;strokeColor=#6d28d9;fontColor=#111827;startSize=28;fontSize=12;align=left;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="70" y="850" width="300" height="250" as="geometry"/>
+        </mxCell>
+        <mxCell id="reportRecord" value="&lt;b&gt;ReportRecord&lt;/b&gt;&lt;hr&gt;+ report_id: string&lt;br&gt;+ report_type: ReportType&lt;br&gt;+ format: ReportFormat&lt;br&gt;+ download_url: string&lt;br&gt;+ file_size_bytes: int&lt;br&gt;+ generated_at: datetime&lt;br&gt;+ generated_by_uid: string&lt;br&gt;+ linked_alert_id: string&lt;br&gt;+ filename: string" style="swimlane;html=1;whiteSpace=wrap;rounded=0;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#111827;startSize=28;fontSize=12;align=left;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="430" y="850" width="300" height="230" as="geometry"/>
+        </mxCell>
+        <mxCell id="notice" value="&lt;b&gt;Notice&lt;/b&gt;&lt;hr&gt;+ notice_id: string&lt;br&gt;+ title: string&lt;br&gt;+ body: string&lt;br&gt;+ is_pinned: boolean&lt;br&gt;+ expires_at: datetime&lt;br&gt;+ posted_by_uid: string&lt;br&gt;+ posted_by_name: string&lt;br&gt;+ created_at: datetime" style="swimlane;html=1;whiteSpace=wrap;rounded=0;fillColor=#ecfccb;strokeColor=#65a30d;fontColor=#111827;startSize=28;fontSize=12;align=left;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="790" y="850" width="290" height="210" as="geometry"/>
+        </mxCell>
+        <mxCell id="mohNotification" value="&lt;b&gt;MoHNotification&lt;/b&gt;&lt;hr&gt;+ notification_id: string&lt;br&gt;+ ward_id: string&lt;br&gt;+ disease: string&lt;br&gt;+ severity: string&lt;br&gt;+ notes: string&lt;br&gt;+ source: string&lt;br&gt;+ ocr_scan_id: string&lt;br&gt;+ committed_by_uid: string&lt;br&gt;+ created_at: datetime" style="swimlane;html=1;whiteSpace=wrap;rounded=0;fillColor=#fef3c7;strokeColor=#d97706;fontColor=#111827;startSize=28;fontSize=12;align=left;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="1150" y="850" width="310" height="230" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="authService" value="&lt;b&gt;AuthService&lt;/b&gt;&lt;hr&gt;+ firebase_sign_in()&lt;br&gt;+ decode_token()&lt;br&gt;+ build_token_response()&lt;br&gt;+ role_from_authenticated_user()" style="swimlane;html=1;whiteSpace=wrap;rounded=0;fillColor=#f8fafc;strokeColor=#334155;fontColor=#111827;startSize=28;fontSize=12;align=left;spacing=8;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="70" y="1190" width="300" height="135" as="geometry"/>
+        </mxCell>
+        <mxCell id="domainService" value="&lt;b&gt;DomainService&lt;/b&gt;&lt;hr&gt;+ create_audit()&lt;br&gt;+ create_lab_result()&lt;br&gt;+ commit_ocr_to_domain()" style="swimlane;html=1;whiteSpace=wrap;rounded=0;fillColor=#f8fafc;strokeColor=#334155;fontColor=#111827;startSize=28;fontSize=12;align=left;spacing=8;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="430" y="1190" width="300" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="mlService" value="&lt;b&gt;MLService&lt;/b&gt;&lt;hr&gt;+ detect_anomaly()&lt;br&gt;+ predict_outbreak_risk()&lt;br&gt;+ calculate_task_priority()&lt;br&gt;+ find_root_cause_associations()" style="swimlane;html=1;whiteSpace=wrap;rounded=0;fillColor=#f8fafc;strokeColor=#334155;fontColor=#111827;startSize=28;fontSize=12;align=left;spacing=8;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="790" y="1190" width="310" height="135" as="geometry"/>
+        </mxCell>
+        <mxCell id="firebaseService" value="&lt;b&gt;FirebaseService&lt;/b&gt;&lt;hr&gt;+ create_document()&lt;br&gt;+ get_document()&lt;br&gt;+ update_document()&lt;br&gt;+ list_collection()" style="swimlane;html=1;whiteSpace=wrap;rounded=0;fillColor=#f8fafc;strokeColor=#334155;fontColor=#111827;startSize=28;fontSize=12;align=left;spacing=8;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="1190" width="300" height="135" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="u_a" value="1 to many" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#6b7280;fontSize=11;" edge="1" parent="1" source="userProfile" target="wardAudit"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="u_l" value="1 to many" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#6b7280;fontSize=11;" edge="1" parent="1" source="userProfile" target="labResult"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="u_al" value="validates" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#6b7280;fontSize=11;" edge="1" parent="1" source="userProfile" target="alert"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="u_o" value="creates" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#6b7280;fontSize=11;" edge="1" parent="1" source="userProfile" target="ocrResult"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="u_r" value="generates" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#6b7280;fontSize=11;" edge="1" parent="1" source="userProfile" target="reportRecord"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="u_n" value="posts" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#6b7280;fontSize=11;" edge="1" parent="1" source="userProfile" target="notice"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="u_m" value="commits" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#6b7280;fontSize=11;" edge="1" parent="1" source="userProfile" target="mohNotification"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="u_i" value="doctor writes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#6b7280;fontSize=11;" edge="1" parent="1" source="userProfile" target="managementInstruction"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <mxCell id="w_a" value="1 to many" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#15803d;fontSize=11;" edge="1" parent="1" source="ward" target="wardAudit"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="w_l" value="1 to many" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#15803d;fontSize=11;" edge="1" parent="1" source="ward" target="labResult"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="w_al" value="receives" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#15803d;fontSize=11;" edge="1" parent="1" source="ward" target="alert"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="w_m" value="linked to" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#15803d;fontSize=11;" edge="1" parent="1" source="ward" target="mohNotification"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <mxCell id="p_l" value="1 to many" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#b45309;fontSize=11;" edge="1" parent="1" source="pathogen" target="labResult"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="p_s" value="1 to 1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#b45309;fontSize=11;" edge="1" parent="1" source="pathogen" target="pathogenStats"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <mxCell id="a_alert" value="may trigger" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#b91c1c;fontSize=11;" edge="1" parent="1" source="wardAudit" target="alert"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="l_alert" value="may trigger" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#b91c1c;fontSize=11;" edge="1" parent="1" source="labResult" target="alert"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="alert_instr" value="has" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#b91c1c;fontSize=11;" edge="1" parent="1" source="alert" target="managementInstruction"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="alert_report" value="may generate" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#b91c1c;fontSize=11;" edge="1" parent="1" source="alert" target="reportRecord"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <mxCell id="ocr_audit" value="may commit to" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#6d28d9;fontSize=11;" edge="1" parent="1" source="ocrResult" target="wardAudit"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="ocr_lab" value="may commit to" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#6d28d9;fontSize=11;" edge="1" parent="1" source="ocrResult" target="labResult"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="ocr_moh" value="may commit to" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#6d28d9;fontSize=11;" edge="1" parent="1" source="ocrResult" target="mohNotification"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <mxCell id="domain_audit" value="creates" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=dashed;endFill=0;strokeColor=#334155;fontSize=11;dashed=1;" edge="1" parent="1" source="domainService" target="wardAudit"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="domain_lab" value="creates" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=dashed;endFill=0;strokeColor=#334155;fontSize=11;dashed=1;" edge="1" parent="1" source="domainService" target="labResult"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="ml_alert" value="creates risk alerts" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=dashed;endFill=0;strokeColor=#334155;fontSize=11;dashed=1;" edge="1" parent="1" source="mlService" target="alert"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="firebase_models" value="persists documents" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=dashed;endFill=0;strokeColor=#334155;fontSize=11;dashed=1;" edge="1" parent="1" source="firebaseService" target="ward"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
