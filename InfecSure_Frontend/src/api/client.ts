@@ -4,8 +4,19 @@ export const TOKEN_KEY = "infecsure.access_token";
 export const REFRESH_KEY = "infecsure.refresh_token";
 export const USER_KEY = "infecsure.user";
 
+export function resolveApiBaseUrl() {
+  const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL;
+  if (configuredBaseUrl) return configuredBaseUrl;
+
+  if (import.meta.env.DEV) {
+    return "/api";
+  }
+
+  return "https://infecsure-api.onrender.com";
+}
+
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000",
+  baseURL: resolveApiBaseUrl(),
   timeout: 60000
 });
 

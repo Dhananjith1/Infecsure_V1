@@ -361,12 +361,19 @@ def get_ocr_record(scan_id: str) -> Optional[dict]:
 def confirm_ocr_record(scan_id: str, corrected_fields: dict) -> None:
     update_document("ocr_queue", scan_id, {
         "corrected_fields": corrected_fields,
-        "status": "confirmed",
+        "status": "pending_review",
+    })
+
+
+def approve_ocr_record(scan_id: str) -> None:
+    update_document("ocr_queue", scan_id, {
+        "status": "approved",
+        "approved_at": _now(),
     })
 
 
 def commit_ocr_record(scan_id: str) -> None:
-    update_document("ocr_queue", scan_id, {"status": "committed"})
+    approve_ocr_record(scan_id)
 
 
 def list_ocr_queue(status: str = "pending_review") -> list[dict]:

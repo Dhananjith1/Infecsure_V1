@@ -39,9 +39,21 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
 
+    # Optional startup seeding
+    seed_icno_password: str = ""
+    seed_sister_password: str = ""
+    seed_lab_password: str = ""
+    seed_doctor_password: str = ""
+    seed_staff_password: str = ""
+
     # App
     app_env: str = "development"
-    cors_origins: list[str] = ["http://localhost:3000", "https://infecsure.web.app"]
+    cors_origins: list[str] = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "https://infecsure.web.app",
+    ]
 
 
 @lru_cache()

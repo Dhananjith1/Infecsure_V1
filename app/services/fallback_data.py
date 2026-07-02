@@ -1,11 +1,199 @@
 from __future__ import annotations
 
+import uuid
+from datetime import datetime, timezone
 from typing import Any
+
+
+def firebase_unavailable() -> bool:
+    from app.config import firebase_credentials_available
+
+    return not firebase_credentials_available()
 
 
 def is_quota_error(exc: Exception) -> bool:
     text = f"{type(exc).__name__} {exc}".lower()
     return "resourceexhausted" in text or "quota exceeded" in text or "429" in text
+
+
+OCR_QUEUE: dict[str, dict[str, Any]] = {}
+AUDITS: list[dict[str, Any]] = []
+MOH_NOTIFICATIONS: list[dict[str, Any]] = []
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def create_ocr_record(data: dict[str, Any]) -> str:
+    scan_id = f"fallback-ocr-{uuid.uuid4().hex[:12]}"
+    record = dict(data)
+    record.update({
+        "scan_id": scan_id,
+        "status": "pending_review",
+        "created_at": _now_iso(),
+        "fallback": True,
+    })
+    OCR_QUEUE[scan_id] = record
+    return scan_id
+
+
+def get_ocr_record(scan_id: str) -> dict[str, Any] | None:
+    record = OCR_QUEUE.get(scan_id)
+    return dict(record) if record else None
+
+
+def confirm_ocr_record(scan_id: str, corrected_fields: dict[str, Any]) -> None:
+    record = OCR_QUEUE.get(scan_id)
+    if not record:
+        return
+    record["corrected_fields"] = dict(corrected_fields)
+    record["status"] = "pending_review"
+
+
+def approve_ocr_record(scan_id: str) -> None:
+    record = OCR_QUEUE.get(scan_id)
+    if not record:
+        return
+    record["status"] = "approved"
+    record["approved_at"] = _now_iso()
+
+
+def commit_ocr_record(scan_id: str) -> None:
+    record = OCR_QUEUE.get(scan_id)
+    if not record:
+        return
+    approve_ocr_record(scan_id)
+
+
+def list_ocr_queue(status: str = "pending_review") -> list[dict[str, Any]]:
+    return [dict(record) for record in OCR_QUEUE.values() if record.get("status") == status]
+
+
+def _resolve_ward_id(payload: dict[str, Any]) -> None:
+    if payload.get("ward_id"):
+        return
+    ward_name = payload.get("ward_name") or payload.get("ward")
+    if not ward_name:
+        return
+    text = str(ward_name).strip().lower()
+    if "female" in text:
+        payload["ward_id"] = "female_ward"
+    elif "male" in text:
+        payload["ward_id"] = "male_ward"
+    elif "etu" in text or "emergency" in text:
+        payload["ward_id"] = "etu"
+    elif "opd" in text:
+        payload["ward_id"] = "opd"
+    elif "family" in text or "clinic" in text:
+        payload["ward_id"] = "family_medical_clinic"
+    elif "psych" in text:
+        payload["ward_id"] = "psychiatrist_clinic"
+
+
+def commit_ocr_to_domain(
+    collection: str,
+    corrected_fields: dict[str, Any],
+    committed_by_uid: str,
+    committed_by_email: str,
+    scan_id: str,
+) -> dict[str, Any]:
+    from app.models.audit import AuditCreate
+    from app.models.lab import LabResultCreate
+    from app.services import ml_service
+
+    payload = dict(corrected_fields)
+    _resolve_ward_id(payload)
+    collection_key = collection.strip().lower().replace("-", "_")
+
+    if collection_key in {"lab", "lab_result", "lab_results"}:
+        body = LabResultCreate(**payload)
+        colony_count = body.colony_count if body.colony_count is not None else 1
+        anomaly = ml_service.detect_anomaly(body.pathogen_id, colony_count)
+        result_id = f"fallback-lab-{uuid.uuid4().hex[:12]}"
+        record = body.model_dump(mode="json")
+        record.update({
+            "result_id": result_id,
+            "entered_by_uid": committed_by_uid,
+            "entered_by_name": committed_by_email,
+            "status": "pending",
+            "anomaly": anomaly,
+            "source": "ocr",
+            "ocr_scan_id": scan_id,
+        })
+        LAB_RESULTS.append(record)
+        if anomaly.get("is_anomaly"):
+            ALERTS.append({
+                "alert_id": f"fallback-alert-{uuid.uuid4().hex[:12]}",
+                "alert_type": "anomaly",
+                "ward_id": body.ward_id,
+                "title": f"Pathogen Anomaly - {body.pathogen_name}",
+                "description": anomaly.get("message"),
+                "severity": anomaly.get("severity") or "warning",
+                "status": "pending",
+                "source_data": {"result_id": result_id, "z_score": anomaly.get("z_score"), "colony_count": colony_count},
+                "target_roles": ["icno", "doctor"],
+            })
+        return {"collection": "lab_results", "result_id": result_id, "message": "Lab result recorded locally."}
+
+    if collection_key in {"audit", "audits", "ward_audit", "ward_audits"}:
+        body = AuditCreate(**payload)
+        scores = [body.hand_hygiene_score, body.ppe_score, body.waste_segregation_score, body.environmental_score]
+        overall = round(sum(scores) / len(scores), 2)
+        audit_id = f"fallback-audit-{uuid.uuid4().hex[:12]}"
+        record = body.model_dump(mode="json")
+        record.update({
+            "audit_id": audit_id,
+            "overall_compliance_score": overall,
+            "conducted_by_uid": committed_by_uid,
+            "conducted_by_name": committed_by_email,
+            "status": "submitted",
+            "source": "ocr",
+            "ocr_scan_id": scan_id,
+        })
+        AUDITS.append(record)
+        for ward in WARDS:
+            if ward["ward_id"] == body.ward_id:
+                ward["compliance_score"] = overall
+                break
+        if overall < 70.0:
+            ALERTS.append({
+                "alert_id": f"fallback-alert-{uuid.uuid4().hex[:12]}",
+                "alert_type": "compliance_failure",
+                "ward_id": body.ward_id,
+                "title": f"Compliance Failure - {body.ward_id}",
+                "description": f"Ward compliance dropped to {overall:.1f}% (below 70% threshold).",
+                "severity": "high" if overall < 50 else "medium",
+                "status": "pending",
+                "source_data": {"audit_id": audit_id, "overall_compliance_score": overall},
+                "target_roles": ["icno", "sister"],
+            })
+        return {"collection": "audits", "audit_id": audit_id, "overall_compliance_score": overall, "message": "Audit recorded locally."}
+
+    if collection_key in {"moh", "moh_notification", "moh_notifications"}:
+        notification_id = f"fallback-moh-{uuid.uuid4().hex[:12]}"
+        record = {
+            **payload,
+            "notification_id": notification_id,
+            "source": "ocr",
+            "ocr_scan_id": scan_id,
+            "committed_by_uid": committed_by_uid,
+        }
+        MOH_NOTIFICATIONS.append(record)
+        ALERTS.append({
+            "alert_id": f"fallback-alert-{uuid.uuid4().hex[:12]}",
+            "alert_type": "moh_notification",
+            "ward_id": payload.get("ward_id"),
+            "title": f"MoH Notification - {payload.get('disease', 'Special Disease')}",
+            "description": payload.get("notes") or payload.get("disease") or "OCR-confirmed MoH notification requires ICNO validation.",
+            "severity": payload.get("severity", "medium"),
+            "status": "pending",
+            "source_data": {"notification_id": notification_id, "ocr_scan_id": scan_id},
+            "target_roles": ["icno", "doctor"],
+        })
+        return {"collection": "moh_notifications", "notification_id": notification_id, "message": "MoH notification saved locally."}
+
+    raise ValueError("OCR commit target must be one of: lab_results, audits, moh_notifications.")
 
 
 WARDS: list[dict[str, Any]] = [
