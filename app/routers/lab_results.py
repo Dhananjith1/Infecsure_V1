@@ -194,7 +194,7 @@ async def list_lab_results(
         bounded_limit = min(max(limit, 1), 100)
         results = fs.list_lab_results(ward_id=ward_id, limit=bounded_limit)
     except Exception as exc:
-        if fallback_data.is_quota_error(exc):
+        if fallback_data.firebase_unavailable() or fallback_data.is_quota_error(exc):
             results = [r for r in fallback_data.LAB_RESULTS if not ward_id or r.get("ward_id") == ward_id][:bounded_limit]
         else:
             raise

@@ -49,7 +49,13 @@ async def create_audit(
 @router.get("/", summary="List all audits")
 async def list_audits(limit: int = 50, current_user: TokenData = _ALL_AUTH):
     """Returns all ward audit records. Accessible to all authenticated roles."""
-    return fs.list_all_audits(limit=min(max(limit, 1), 100))
+    bounded_limit = min(max(limit, 1), 100)
+    try:
+        return fs.list_all_audits(limit=bounded_limit)
+    except Exception as exc:
+        if fallback_data.firebase_unavailable() or fallback_data.is_quota_error(exc):
+            return fallback_data.AUDITS[:bounded_limit]
+        raise
 
 
 @router.post("/sync", status_code=status.HTTP_201_CREATED, summary="Sync offline PWA audit records")
@@ -111,7 +117,13 @@ async def get_priority_list(_: TokenData = _ICNO_ONLY):
 
 @router.get("/{audit_id}", summary="Get specific audit")
 async def get_audit(audit_id: str, _: TokenData = _ALL_AUTH):
-    audit = fs.get_audit(audit_id)
+    try:
+        audit = fs.get_audit(audit_id)
+    except Exception as exc:
+        if fallback_data.firebase_unavailable() or fallback_data.is_quota_error(exc):
+            audit = next((item for item in fallback_data.AUDITS if item.get("audit_id") == audit_id), None)
+        else:
+            raise
     if not audit:
         raise HTTPException(status_code=404, detail="Audit not found.")
     return audit

@@ -12,12 +12,36 @@ import httpx
 from jose import JWTError, jwt
 
 from app.config import auth_client, db, get_settings
+from app.services import fallback_data
 from app.models.auth import TokenData, TokenResponse
 
 settings = get_settings()
 
 FIREBASE_WEB_API_KEY = settings.firebase_web_api_key or os.environ.get("FIREBASE_WEB_API_KEY", "")
 ALLOWED_ROLES = {"icno", "sister", "lab", "doctor", "staff"}
+DEMO_PASSWORDS = {
+    "icno@infecsure.com": "icno@123",
+    "matron@infecsure.com": "matron@123",
+    "lab@infecsure.com": "lab@123",
+    "doctor@infecsure.com": "doctor@123",
+    "staff@infecsure.com": "staff@123",
+}
+
+
+def _demo_password(env_name: str, email: str, default_password: str) -> str:
+    value = os.environ.get(env_name, "").strip()
+    if value:
+        return value
+    return DEMO_PASSWORDS.get(email.lower().strip(), default_password)
+
+
+DEMO_PASSWORD_BY_EMAIL = {
+    "icno@infecsure.com": _demo_password("SEED_ICNO_PASSWORD", "icno@infecsure.com", "icno@123"),
+    "matron@infecsure.com": _demo_password("SEED_SISTER_PASSWORD", "matron@infecsure.com", "matron@123"),
+    "lab@infecsure.com": _demo_password("SEED_LAB_PASSWORD", "lab@infecsure.com", "lab@123"),
+    "doctor@infecsure.com": _demo_password("SEED_DOCTOR_PASSWORD", "doctor@infecsure.com", "doctor@123"),
+    "staff@infecsure.com": _demo_password("SEED_STAFF_PASSWORD", "staff@infecsure.com", "staff@123"),
+}
 
 
 def _create_token(data: dict, expires_delta: timedelta) -> str:
@@ -78,6 +102,17 @@ async def firebase_sign_in(email: str, password: str) -> dict:
     if "error" in data:
         raise ValueError(data["error"].get("message", "Authentication failed"))
     return data
+
+
+def local_demo_role(email: str, password: str) -> Optional[str]:
+    """Return a local development role when Firebase-backed auth is unavailable."""
+    if settings.app_env.lower() != "development":
+        return None
+
+    expected_password = DEMO_PASSWORD_BY_EMAIL.get(email.lower().strip(), "")
+    if expected_password and password == expected_password:
+        return fallback_data.ROLE_BY_EMAIL.get(email.lower().strip())
+    return None
 
 
 def admin_verify_user(email: str) -> Optional[dict]:
@@ -141,7 +176,7 @@ async def seed_default_users() -> None:
 
     for user_data in DEFAULT_USERS:
         email = user_data["email"]
-        password = os.environ.get(user_data["password_env"], "")
+        password = _demo_password(user_data["password_env"], email, DEMO_PASSWORD_BY_EMAIL[email])
         if not password:
             continue
 

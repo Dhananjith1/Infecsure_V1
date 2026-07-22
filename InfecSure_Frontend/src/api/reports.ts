@@ -1,4 +1,4 @@
-import { api } from "./client";
+import { api, resolveApiBaseUrl } from "./client";
 
 export type ReportFormat = "pdf" | "excel";
 
@@ -31,8 +31,7 @@ export async function dispatchReport(reportId: string, payload: { to_email: stri
 }
 
 export function reportDownloadUrl(downloadUrl: string) {
-  const base = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
-  return `${base}${downloadUrl}`;
+  return `${resolveApiBaseUrl()}${downloadUrl}`;
 }
 
 export async function downloadReport(downloadUrl: string, filename = "infecsure-report") {

@@ -13,6 +13,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from jose import JWTError
 
+from app.config import get_settings
 from app.dependencies import get_current_user
 from app.models.auth import LoginRequest, RefreshRequest, TokenData, TokenResponse
 from app.services import auth_service, fallback_data, firebase_service as fs
@@ -45,6 +46,15 @@ async def login(
     """
     email = body.email.lower().strip()
     password = body.password
+    settings = get_settings()
+
+    demo_role = auth_service.local_demo_role(email, password)
+    if settings.app_env.lower() == "development" and demo_role:
+        return auth_service.build_token_response(
+            uid=email,
+            email=email,
+            role=demo_role,
+        )
 
     try:
         firebase_payload = await auth_service.firebase_sign_in(email, password)
@@ -69,6 +79,13 @@ async def login(
     try:
         user_doc = fs.get_user_by_uid(uid) or fs.get_user_by_email(email)
     except Exception as exc:
+        demo_role = auth_service.local_demo_role(email, password)
+        if demo_role:
+            return auth_service.build_token_response(
+                uid=uid,
+                email=email,
+                role=demo_role,
+            )
         if fallback_data.is_quota_error(exc) and email in fallback_data.ROLE_BY_EMAIL:
             return auth_service.build_token_response(
                 uid=uid,
@@ -77,6 +94,12 @@ async def login(
             )
         raise
     if not user_doc:
+        if demo_role:
+            return auth_service.build_token_response(
+                uid=uid,
+                email=email,
+                role=demo_role,
+            )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=(

@@ -13,7 +13,7 @@ from app.dependencies import require_role
 from app.models.auth import TokenData
 from app.models.ocr import FormType, OCRConfirmRequest, OCRScanRequest
 from app.models.user import UserRole
-from app.services import domain_service, firebase_service as fs, ocr_service
+from app.services import domain_service, fallback_data, firebase_service as fs, ocr_service
 
 import numpy as np
 
@@ -63,7 +63,13 @@ async def scan_document(body: OCRScanRequest, current_user: TokenData = _ICNO_ON
     }
 
     data = clean_data_for_firestore(data)
-    scan_id = fs.create_ocr_record(data)
+    try:
+        scan_id = fs.create_ocr_record(data)
+    except Exception as exc:
+        if fallback_data.firebase_unavailable() or fallback_data.is_quota_error(exc):
+            scan_id = fallback_data.create_ocr_record(data)
+        else:
+            raise
     
     
     final_response = {
@@ -79,6 +85,46 @@ async def scan_document(body: OCRScanRequest, current_user: TokenData = _ICNO_ON
     
     
     return clean_data_for_firestore(final_response)
+
+
+def _get_ocr_record(scan_id: str) -> dict | None:
+    try:
+        return fs.get_ocr_record(scan_id)
+    except Exception as exc:
+        if fallback_data.firebase_unavailable() or fallback_data.is_quota_error(exc):
+            return fallback_data.get_ocr_record(scan_id)
+        raise
+
+
+def _approve_ocr_record(scan_id: str) -> None:
+    try:
+        if fallback_data.firebase_unavailable():
+            fallback_data.approve_ocr_record(scan_id)
+        else:
+            fs.approve_ocr_record(scan_id)
+    except Exception as exc:
+        if fallback_data.firebase_unavailable() or fallback_data.is_quota_error(exc):
+            fallback_data.approve_ocr_record(scan_id)
+        else:
+            raise
+
+
+def _commit_verified_fields(collection: str, corrected_fields: dict, current_user: TokenData, scan_id: str) -> dict:
+    if fallback_data.firebase_unavailable():
+        return fallback_data.commit_ocr_to_domain(
+            collection,
+            corrected_fields,
+            committed_by_uid=current_user.uid,
+            committed_by_email=current_user.email,
+            scan_id=scan_id,
+        )
+    return domain_service.commit_ocr_to_domain(
+        collection,
+        corrected_fields,
+        committed_by_uid=current_user.uid,
+        committed_by_email=current_user.email,
+        scan_id=scan_id,
+    )
 
 
 @router.post("/upload", status_code=status.HTTP_201_CREATED, summary="Upload image for OCR processing")
@@ -104,18 +150,29 @@ async def upload_document(
 
 @router.get("/pending", summary="List low-confidence OCR records pending ICNO review")
 async def list_low_confidence_ocr(_: TokenData = _ICNO_ONLY):
-    records = fs.list_ocr_queue(status="pending_review")
+    try:
+        records = fs.list_ocr_queue(status="pending_review")
+    except Exception as exc:
+        if fallback_data.firebase_unavailable() or fallback_data.is_quota_error(exc):
+            records = fallback_data.list_ocr_queue(status="pending_review")
+        else:
+            raise
     return [r for r in records if r.get("low_confidence_count", 0) > 0]
 
 
 @router.get("/queue", summary="List pending OCR records (ICNO only)")
 async def list_ocr_queue(_: TokenData = _ICNO_ONLY):
-    return fs.list_ocr_queue(status="pending_review")
+    try:
+        return fs.list_ocr_queue(status="pending_review")
+    except Exception as exc:
+        if fallback_data.firebase_unavailable() or fallback_data.is_quota_error(exc):
+            return fallback_data.list_ocr_queue(status="pending_review")
+        raise
 
 
 @router.get("/{scan_id}", summary="Get OCR record (ICNO only)")
 async def get_ocr_record(scan_id: str, _: TokenData = _ICNO_ONLY):
-    record = fs.get_ocr_record(scan_id)
+    record = _get_ocr_record(scan_id)
     if not record:
         raise HTTPException(status_code=404, detail="OCR record not found.")
     return record
@@ -123,35 +180,40 @@ async def get_ocr_record(scan_id: str, _: TokenData = _ICNO_ONLY):
 
 @router.post("/confirm", summary="ICNO confirms and commits an OCR record")
 async def confirm_ocr(body: OCRConfirmRequest, current_user: TokenData = _ICNO_ONLY):
-    record = fs.get_ocr_record(body.scan_id)
+    record = _get_ocr_record(body.scan_id)
     if not record:
         raise HTTPException(status_code=404, detail="OCR record not found.")
-    if record.get("status") == "committed":
-        raise HTTPException(status_code=400, detail="OCR record already committed.")
+    if record.get("status") == "approved":
+        raise HTTPException(status_code=400, detail="OCR record already approved.")
 
-    fs.confirm_ocr_record(body.scan_id, body.corrected_fields)
+    use_fallback = fallback_data.firebase_unavailable()
+    if use_fallback:
+        fallback_data.confirm_ocr_record(body.scan_id, body.corrected_fields)
+    else:
+        fs.confirm_ocr_record(body.scan_id, body.corrected_fields)
 
     if body.commit_to_collection:
         try:
-            commit_result = domain_service.commit_ocr_to_domain(
+            commit_result = _commit_verified_fields(
                 body.commit_to_collection,
                 body.corrected_fields,
-                committed_by_uid=current_user.uid,
-                committed_by_email=current_user.email,
-                scan_id=body.scan_id,
+                current_user,
+                body.scan_id,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
-
-        fs.commit_ocr_record(body.scan_id)
+        _approve_ocr_record(body.scan_id)
         return {
             "scan_id": body.scan_id,
             "status": "committed",
             **commit_result,
         }
 
+    _approve_ocr_record(body.scan_id)
+
     return {
         "scan_id": body.scan_id,
-        "status": "confirmed",
-        "message": "OCR record confirmed. Fields saved for review.",
+        "status": "approved",
+        "message": "OCR record approved. Fields saved for review.",
+        "fallback": use_fallback,
     }

@@ -56,7 +56,7 @@ async def list_alerts(
         try:
             alerts = fs.list_alerts(status=alert_status, limit=bounded_limit)
         except Exception as exc:
-            if fallback_data.is_quota_error(exc):
+            if fallback_data.firebase_unavailable() or fallback_data.is_quota_error(exc):
                 alerts = [a for a in fallback_data.ALERTS if not alert_status or a.get("status") == alert_status][:bounded_limit]
             else:
                 raise
@@ -65,7 +65,7 @@ async def list_alerts(
         try:
             alerts = fs.list_alerts(status="approved", limit=bounded_limit)
         except Exception as exc:
-            if fallback_data.is_quota_error(exc):
+            if fallback_data.firebase_unavailable() or fallback_data.is_quota_error(exc):
                 alerts = [a for a in fallback_data.ALERTS if a.get("status") == "approved"][:bounded_limit]
             else:
                 raise
@@ -74,7 +74,7 @@ async def list_alerts(
         try:
             alerts = fs.list_alerts(status="approved", limit=bounded_limit)
         except Exception as exc:
-            if fallback_data.is_quota_error(exc):
+            if fallback_data.firebase_unavailable() or fallback_data.is_quota_error(exc):
                 alerts = [a for a in fallback_data.ALERTS if a.get("status") == "approved"][:bounded_limit]
             else:
                 raise
@@ -93,7 +93,7 @@ async def list_pending_alerts(_: TokenData = _ICNO_ONLY):
     try:
         return fs.list_alerts(status="pending", limit=200)
     except Exception as exc:
-        if fallback_data.is_quota_error(exc):
+        if fallback_data.firebase_unavailable() or fallback_data.is_quota_error(exc):
             return [a for a in fallback_data.ALERTS if a.get("status") == "pending"]
         raise
 
@@ -104,7 +104,7 @@ async def get_dashboard(_: TokenData = _ICNO_OR_SISTER):
     try:
         return ml_service.get_dashboard_summary()
     except Exception as exc:
-        if fallback_data.is_quota_error(exc):
+        if fallback_data.firebase_unavailable() or fallback_data.is_quota_error(exc):
             return fallback_data.dashboard_summary()
         raise
 
@@ -125,7 +125,7 @@ async def get_root_cause(
     try:
         return ml_service.find_root_cause_associations(min_support, min_confidence, min_lift, max_rules)
     except Exception as exc:
-        if fallback_data.is_quota_error(exc):
+        if fallback_data.firebase_unavailable() or fallback_data.is_quota_error(exc):
             return fallback_data.ROOT_CAUSE_RULES[:max_rules]
         raise
 

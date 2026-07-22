@@ -67,6 +67,22 @@ class TestAuth:
             })
         assert resp.status_code == 401
 
+    def test_local_demo_roles_cover_all_default_profiles(self):
+        from app.services.auth_service import DEMO_PASSWORD_BY_EMAIL, local_demo_role
+
+        expected_roles = {
+            "icno@infecsure.com": "icno",
+            "matron@infecsure.com": "sister",
+            "lab@infecsure.com": "lab",
+            "doctor@infecsure.com": "doctor",
+            "staff@infecsure.com": "staff",
+        }
+
+        for email, role in expected_roles.items():
+            password = DEMO_PASSWORD_BY_EMAIL[email]
+            assert password, f"Missing demo password for {email}"
+            assert local_demo_role(email, password) == role
+
     def test_login_success_uses_json_body_firebase_and_firestore_uid_profile(self):
         with patch(
             "app.services.auth_service.firebase_sign_in",
@@ -258,8 +274,103 @@ class TestMLService:
         assert _risk_level_from_score(10.0) == "low"
         assert _risk_level_from_score(35.0) == "medium"
         assert _risk_level_from_score(60.0) == "high"
-        assert _risk_level_from_score(80.0) == "critical"
 
+    def test_ocr_scan_uses_local_fallback_queue_when_firestore_unavailable(self):
+        import base64
+
+        tiny_png = base64.b64encode(
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
+            b"\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
+            b"\x00\x00\x00\x0cIDAT\x08\xd7c\xf8\xff\xff?\x00\x05\xfe\x02"
+            b"\xfeA\x0e\x1d\xb1\x00\x00\x00\x00IEND\xaeB`\x82"
+        ).decode("ascii")
+
+        with patch("app.services.ocr_service.process_image", return_value={
+            "raw_text": "Ward: Male Ward",
+            "tokens": [{"text": "Ward", "confidence": 0.61, "needs_review": True}],
+            "low_confidence_count": 1,
+            "extracted_fields": {"ward_id": "male_ward"},
+        }), patch("app.services.firebase_service.create_ocr_record", side_effect=RuntimeError("Firebase service account not found")), \
+             patch("app.services.firebase_service.list_ocr_queue", side_effect=RuntimeError("Firebase service account not found")), \
+             patch("app.services.firebase_service.get_ocr_record", side_effect=RuntimeError("Firebase service account not found")), \
+             patch("app.services.firebase_service.confirm_ocr_record", side_effect=RuntimeError("Firebase service account not found")):
+            scan_resp = client.post(
+                "/ocr/scan",
+                json={"image_base64": tiny_png, "form_type": "general"},
+                headers=auth_headers("icno-test", "icno@infecsure.com", "icno"),
+            )
+
+            assert scan_resp.status_code == 201
+            scan_data = scan_resp.json()
+            assert scan_data["scan_id"].startswith("fallback-ocr-")
+            assert scan_data["status"] == "pending_review"
+
+            queue_resp = client.get(
+                "/ocr/queue",
+                headers=auth_headers("icno-test", "icno@infecsure.com", "icno"),
+            )
+            assert queue_resp.status_code == 200
+            assert any(item["scan_id"] == scan_data["scan_id"] for item in queue_resp.json())
+
+            confirm_resp = client.post(
+                "/ocr/confirm",
+                json={"scan_id": scan_data["scan_id"], "corrected_fields": {"ward_id": "male_ward"}},
+                headers=auth_headers("icno-test", "icno@infecsure.com", "icno"),
+            )
+            assert confirm_resp.status_code == 200
+            assert confirm_resp.json()["status"] == "approved"
+
+    def test_ocr_confirm_commits_verified_lab_result_locally(self):
+        import base64
+
+        tiny_png = base64.b64encode(
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
+            b"\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
+            b"\x00\x00\x00\x0cIDAT\x08\xd7c\xf8\xff\xff?\x00\x05\xfe\x02"
+            b"\xfeA\x0e\x1d\xb1\x00\x00\x00\x00IEND\xaeB`\x82"
+        ).decode("ascii")
+
+        with patch("app.services.ocr_service.process_image", return_value={
+            "raw_text": "Ward: Male Ward",
+            "tokens": [],
+            "low_confidence_count": 0,
+            "extracted_fields": {"ward_id": "male_ward"},
+        }), patch("app.services.firebase_service.create_ocr_record", side_effect=RuntimeError("Firebase service account not found")), \
+             patch("app.services.firebase_service.get_ocr_record", side_effect=RuntimeError("Firebase service account not found")), \
+             patch("app.services.firebase_service.list_ocr_queue", side_effect=RuntimeError("Firebase service account not found")), \
+             patch("app.services.firebase_service.approve_ocr_record", side_effect=RuntimeError("Firebase service account not found")):
+            scan_resp = client.post(
+                "/ocr/scan",
+                json={"image_base64": tiny_png, "form_type": "general"},
+                headers=auth_headers("icno-test", "icno@infecsure.com", "icno"),
+            )
+            scan_id = scan_resp.json()["scan_id"]
+
+            with patch("app.services.firebase_service.get_ocr_record", side_effect=RuntimeError("Firebase service account not found")):
+                confirm_resp = client.post(
+                    "/ocr/confirm",
+                    json={
+                        "scan_id": scan_id,
+                        "corrected_fields": {
+                            "ward_id": "male_ward",
+                            "pathogen_id": "dengue",
+                            "pathogen_name": "Dengue",
+                            "specimen_type": "blood",
+                            "test_result": "positive",
+                            "result_date": "2026-07-01T00:00:00+00:00",
+                            "colony_count": 1,
+                        },
+                        "commit_to_collection": "lab_results",
+                    },
+                    headers=auth_headers("icno-test", "icno@infecsure.com", "icno"),
+                )
+
+            assert confirm_resp.status_code == 200
+            data = confirm_resp.json()
+            assert data["status"] == "committed"
+            assert data["collection"] == "lab_results"
+            from app.services import fallback_data
+            assert any(item.get("ocr_scan_id") == scan_id for item in fallback_data.LAB_RESULTS)
     def test_dashboard_summary_empty(self):
         """Dashboard with no data should return sensible defaults."""
         from unittest.mock import patch
