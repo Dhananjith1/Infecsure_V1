@@ -99,19 +99,31 @@ export function ICNODashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+      {/* Header section with sleek backdrop and action buttons */}
+      <div className="flex flex-col justify-between gap-4 rounded-2xl border border-sky-100 bg-gradient-to-r from-sky-900/90 via-slate-900 to-teal-900 p-6 text-white shadow-xl backdrop-blur-md sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-2xl font-bold text-slate-950">ICNO Command Dashboard</h1>
-          <p className="mt-1 text-sm text-slate-600">Pending validation stays separated from confirmed clinical status.</p>
+          <h1 className="text-2xl font-black tracking-wide text-white drop-shadow-sm">ICNO Command Dashboard</h1>
+          <p className="mt-1 text-sm font-medium text-sky-100/90">Pending validation stays separated from confirmed clinical status.</p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Link to="/icno/audit"><Button icon={<ClipboardCheck size={18} />}>New Audit</Button></Link>
-          <Link to="/icno/scan"><Button variant="secondary" icon={<Camera size={18} />}>Scan Document</Button></Link>
+          <Link to="/icno/audit">
+            <button className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-teal-900/30 transition-all hover:scale-[1.02] hover:from-teal-400 hover:to-emerald-400 active:scale-[0.98]">
+              <ClipboardCheck size={18} />
+              New Audit
+            </button>
+          </Link>
+          <Link to="/icno/scan">
+            <button className="flex items-center gap-2 rounded-xl border border-white/30 bg-white/10 px-4 py-2.5 text-sm font-bold text-white backdrop-blur-md transition-all hover:bg-white/20 hover:scale-[1.02] active:scale-[0.98]">
+              <Camera size={18} />
+              Scan Document
+            </button>
+          </Link>
         </div>
       </div>
 
-      <Card>
-        <CardBody className="grid gap-2 sm:grid-cols-4">
+      {/* Navigation tabs */}
+      <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-2 shadow-lg backdrop-blur-md">
+        <div className="grid gap-2 sm:grid-cols-4">
           {dashboardTabs.map((item) => {
             const Icon = item.icon;
             return (
@@ -119,65 +131,104 @@ export function ICNODashboard() {
                 key={item.sectionId}
                 type="button"
                 onClick={() => scrollToSection(item.sectionId)}
-                className="touch-target flex items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-700 transition hover:border-clinical-300 hover:bg-clinical-50"
+                className="touch-target group flex items-center justify-center gap-2.5 rounded-xl border border-slate-100 bg-gradient-to-b from-slate-50 to-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm transition-all duration-300 hover:border-sky-300 hover:bg-gradient-to-b hover:from-sky-50 hover:to-teal-50 hover:text-teal-900 hover:shadow-md"
               >
-                <Icon size={17} />
+                <Icon size={18} className="text-teal-600 transition-transform group-hover:scale-110" />
                 {item.label}
               </button>
             );
           })}
-        </CardBody>
-      </Card>
+        </div>
+      </div>
 
+      {/* Overview Stat Cards */}
       <section id="overview" className="scroll-mt-24 space-y-6">
         <div className="grid gap-4 md:grid-cols-4">
-          <Card><CardBody><p className="text-sm text-slate-500">Pending approvals</p><p className="mt-2 text-3xl font-bold text-indigo-700">{pending.length}</p></CardBody></Card>
-          <Card><CardBody><p className="text-sm text-slate-500">Top risk ward</p><div className="mt-2">{topWard ? <RiskBadge level={topWard.risk_level} score={topWard.risk_score} /> : <Skeleton className="h-7 w-28" />}</div></CardBody></Card>
-          <Card><CardBody><p className="text-sm text-slate-500">Wards monitored</p><p className="mt-2 text-3xl font-bold text-emerald-700">{String(summary?.total_wards ?? wards.length)}</p></CardBody></Card>
-          <Card><CardBody><p className="text-sm text-slate-500">Trend breaks</p><p className="mt-2 text-3xl font-bold text-red-700">{String(summary?.recent_anomalies ?? 0)}</p></CardBody></Card>
+          <div className="group relative overflow-hidden rounded-2xl border border-indigo-100 bg-gradient-to-br from-white via-indigo-50/30 to-indigo-100/40 p-5 shadow-md transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+            <div className="absolute -right-4 -top-4 h-20 w-20 rounded-full bg-indigo-500/10 blur-xl group-hover:bg-indigo-500/20" />
+            <p className="text-xs font-bold uppercase tracking-wider text-indigo-900">Pending approvals</p>
+            <p className="mt-3 text-4xl font-extrabold text-indigo-700 drop-shadow-xs">{pending.length}</p>
+          </div>
+
+          <div className="group relative overflow-hidden rounded-2xl border border-amber-100 bg-gradient-to-br from-white via-amber-50/30 to-amber-100/40 p-5 shadow-md transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+            <div className="absolute -right-4 -top-4 h-20 w-20 rounded-full bg-amber-500/10 blur-xl group-hover:bg-amber-500/20" />
+            <p className="text-xs font-bold uppercase tracking-wider text-amber-900">Top risk ward</p>
+            <div className="mt-3">{topWard ? <RiskBadge level={topWard.risk_level} score={topWard.risk_score} /> : <Skeleton className="h-7 w-28" />}</div>
+          </div>
+
+          <div className="group relative overflow-hidden rounded-2xl border border-emerald-100 bg-gradient-to-br from-white via-emerald-50/30 to-teal-100/40 p-5 shadow-md transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+            <div className="absolute -right-4 -top-4 h-20 w-20 rounded-full bg-emerald-500/10 blur-xl group-hover:bg-emerald-500/20" />
+            <p className="text-xs font-bold uppercase tracking-wider text-emerald-900">Wards monitored</p>
+            <p className="mt-3 text-4xl font-extrabold text-emerald-700 drop-shadow-xs">{String(summary?.total_wards ?? wards.length)}</p>
+          </div>
+
+          <div className="group relative overflow-hidden rounded-2xl border border-rose-100 bg-gradient-to-br from-white via-rose-50/30 to-red-100/40 p-5 shadow-md transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+            <div className="absolute -right-4 -top-4 h-20 w-20 rounded-full bg-rose-500/10 blur-xl group-hover:bg-rose-500/20" />
+            <p className="text-xs font-bold uppercase tracking-wider text-rose-900">Trend breaks</p>
+            <p className="mt-3 text-4xl font-extrabold text-rose-700 drop-shadow-xs">{String(summary?.recent_anomalies ?? 0)}</p>
+          </div>
         </div>
       </section>
 
+      {/* Priorities Section */}
       <section id="priorities" className="scroll-mt-24">
-        <Card>
-          <CardHeader title="Today's Top Priorities" description="Risk-weighted priority output from P = (w1 x C) + (w2 x V) + (w3 x L)." action={<Link to="/icno/approvals"><Button variant="secondary" icon={<ShieldCheck size={18} />}>Review queue</Button></Link>} />
-          <CardBody className="space-y-3">
-            {priorityLoading ? <Skeleton className="h-24" /> : null}
+        <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/90 shadow-xl backdrop-blur-md">
+          <CardHeader
+            title="Today's Top Priorities"
+            description="Risk-weighted priority output from P = (w1 x C) + (w2 x V) + (w3 x L)."
+            action={
+              <Link to="/icno/approvals">
+                <Button variant="secondary" icon={<ShieldCheck size={18} />}>Review queue</Button>
+              </Link>
+            }
+          />
+          <CardBody className="space-y-3.5 p-5">
+            {priorityLoading ? <Skeleton className="h-24 rounded-xl" /> : null}
             {!priorityLoading && !priorities.length ? <p className="text-sm text-slate-500">No priority items returned by the backend.</p> : null}
             {priorities.slice(0, 5).map((item, index) => (
-              <Link key={index} to={`/icno/audit?ward=${encodeURIComponent(priorityWardId(item))}`} className="block rounded-md border border-slate-200 p-4 transition hover:border-clinical-600 hover:bg-clinical-50">
-                <div className="flex items-start gap-3">
-                  <TrendingUp className="mt-1 text-clinical-700" size={20} />
-                  <div>
-                    <p className="font-semibold text-slate-950">{String(item.title ?? item.task ?? item.ward_id ?? `Priority ${index + 1}`)}</p>
-                    <p className="mt-1 text-sm text-slate-600">{String(item.description ?? item.reason ?? "Review ward risk, compliance, and lab signals.")}</p>
-                    <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-clinical-700">Start audit for {priorityWardId(item)}</p>
+              <Link
+                key={index}
+                to={`/icno/audit?ward=${encodeURIComponent(priorityWardId(item))}`}
+                className="group block rounded-xl border border-slate-200/90 bg-gradient-to-r from-slate-50/50 via-white to-sky-50/30 p-4 transition-all duration-300 hover:border-teal-500 hover:bg-gradient-to-r hover:from-teal-50/40 hover:to-sky-50/60 hover:shadow-md"
+              >
+                <div className="flex items-start gap-3.5">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-100 text-teal-800 transition-colors group-hover:bg-teal-700 group-hover:text-white">
+                    <TrendingUp size={20} />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-bold text-slate-900 group-hover:text-teal-900">{String(item.title ?? item.task ?? item.ward_id ?? `Priority ${index + 1}`)}</p>
+                    <p className="mt-1 text-sm font-medium text-slate-600">{String(item.description ?? item.reason ?? "Review ward risk, compliance, and lab signals.")}</p>
+                    <p className="mt-2.5 inline-flex items-center text-xs font-bold uppercase tracking-wider text-teal-700 group-hover:text-teal-900">
+                      Start audit for {priorityWardId(item)} →
+                    </p>
                   </div>
                 </div>
               </Link>
             ))}
           </CardBody>
-        </Card>
+        </div>
       </section>
 
+      {/* Heatmap Section */}
       <section id="heatmap" className="scroll-mt-24">
-        <Card>
+        <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/90 shadow-xl backdrop-blur-md">
           <CardHeader title="Hospital Heatmap" description="Same semantic green, amber, and red risk system used across all roles." />
-          <CardBody>{heatmapLoading ? <Skeleton className="h-64" /> : <HeatmapGrid wards={wards} />}</CardBody>
-        </Card>
+          <CardBody className="p-5">{heatmapLoading ? <Skeleton className="h-64 rounded-xl" /> : <HeatmapGrid wards={wards} />}</CardBody>
+        </div>
       </section>
 
+      {/* Analytics / Root Cause Section */}
       <section id="analytics" className="scroll-mt-24">
-        <Card>
+        <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/90 shadow-xl backdrop-blur-md">
           <CardHeader title="Root Cause Insights" description="Apriori associations are shown in plain language before any details." />
-          <CardBody className="grid gap-3 md:grid-cols-2">
-            {insightLoading ? <Skeleton className="h-24" /> : null}
+          <CardBody className="grid gap-4.5 p-5 md:grid-cols-2">
+            {insightLoading ? <Skeleton className="h-24 rounded-xl" /> : null}
             {!insightLoading && !insights.length ? <p className="text-sm text-slate-500">No root-cause associations available.</p> : null}
             {insights.slice(0, 8).map((item, index) => (
               <RootCauseInsightCard key={index} insight={item} />
             ))}
           </CardBody>
-        </Card>
+        </div>
       </section>
     </div>
   );

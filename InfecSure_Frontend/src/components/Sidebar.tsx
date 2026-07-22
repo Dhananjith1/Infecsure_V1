@@ -77,19 +77,19 @@ export function Sidebar() {
             : "";
 
   return (
-    <aside className="flex w-full flex-col border-b border-slate-200 bg-white lg:min-h-screen lg:w-72 lg:border-b-0 lg:border-r">
-      <div className="border-b border-slate-200 p-5">
+    <aside className="flex w-full flex-col border-b border-slate-200/80 bg-white/90 shadow-lg backdrop-blur-md lg:min-h-screen lg:w-72 lg:border-b-0 lg:border-r">
+      <div className="border-b border-slate-200/80 p-5 bg-gradient-to-b from-slate-50 to-white">
         <div className="flex items-center gap-3">
-          <div className="grid h-11 w-11 place-items-center rounded-lg bg-white p-1 shadow-sm border border-slate-200">
+          <div className="grid h-12 w-12 place-items-center rounded-xl bg-white p-1.5 shadow-md border border-slate-200/80 transition-transform hover:scale-105">
             <img src="/logo.png" alt="InfecSure Logo" className="h-full w-full object-contain" />
           </div>
           <div>
-            <p className="text-lg font-bold text-slate-950">InfecSure</p>
-            <p className="text-xs font-medium text-slate-500">Divisional Hospital Thalangama</p>
+            <p className="text-lg font-black tracking-wide text-slate-900">InfecSure</p>
+            <p className="text-[11px] font-semibold text-teal-800">Divisional Hospital Thalangama</p>
           </div>
         </div>
       </div>
-      <nav className="flex gap-2 overflow-x-auto p-3 lg:flex-1 lg:flex-col lg:overflow-visible" aria-label="Role navigation">
+      <nav className="flex gap-2 overflow-x-auto p-3.5 lg:flex-1 lg:flex-col lg:overflow-visible" aria-label="Role navigation">
         {visible.map((item) => {
           const Icon = item.icon;
           const showSectionsBelow = dashboardSections.length > 0 && item.to === dashboardParentPath;
@@ -98,8 +98,10 @@ export function Sidebar() {
               <NavLink
                 to={item.to}
                 className={({ isActive }) =>
-                  `touch-target flex shrink-0 items-center gap-3 rounded-md px-3 py-3 text-sm font-semibold transition ${
-                    isActive ? "bg-clinical-50 text-clinical-800" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+                  `touch-target flex shrink-0 items-center gap-3 rounded-xl px-3.5 py-3 text-sm font-bold transition-all duration-300 ${
+                    isActive
+                      ? "bg-gradient-to-r from-sky-900 to-teal-900 text-white shadow-md shadow-sky-950/20"
+                      : "text-slate-600 hover:bg-slate-100/90 hover:text-slate-950"
                   }`
                 }
               >
@@ -115,11 +117,13 @@ export function Sidebar() {
                       <Link
                         key={section.to}
                         to={section.to}
-                        className={`touch-target flex shrink-0 items-center gap-3 rounded-md px-3 py-2.5 text-sm font-semibold transition ${
-                          isActive ? "bg-clinical-700 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+                        className={`touch-target flex shrink-0 items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-bold transition-all duration-300 ${
+                          isActive
+                            ? "bg-gradient-to-r from-teal-600 to-emerald-600 text-white shadow-md shadow-teal-900/20"
+                            : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
                         }`}
                       >
-                        <SectionIcon size={17} />
+                        <SectionIcon size={16} />
                         {section.label}
                       </Link>
                     );
@@ -130,10 +134,10 @@ export function Sidebar() {
           );
         })}
       </nav>
-      <div className="border-t border-slate-200 p-4">
-        <p className="truncate text-sm font-semibold text-slate-900">{user?.full_name || user?.email}</p>
-        <p className="mb-3 text-xs uppercase tracking-wide text-slate-500">{role || "signed in"}</p>
-        <Button variant="ghost" className="w-full justify-start" icon={<LogOut size={18} />} onClick={logout}>
+      <div className="border-t border-slate-200/80 p-4.5 bg-gradient-to-t from-slate-50 to-white">
+        <p className="truncate text-sm font-bold text-slate-900">{user?.full_name || user?.email}</p>
+        <p className="mb-3 text-[10px] font-extrabold uppercase tracking-wider text-teal-800">{role || "signed in"}</p>
+        <Button variant="ghost" className="w-full justify-start rounded-xl font-bold hover:bg-rose-50 hover:text-rose-700" icon={<LogOut size={18} />} onClick={logout}>
           Logout
         </Button>
       </div>

@@ -11,14 +11,17 @@ export function Layout() {
   const seconds = secondsRemaining % 60;
 
   return (
-    <div className="min-h-screen bg-slate-50 lg:flex">
+    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-sky-50/50 to-teal-50/40 lg:flex">
       <Sidebar />
       <main className="min-w-0 flex-1">
-        <div className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:px-6">
-          <p className="text-sm font-semibold text-slate-700">AI-assisted infection monitoring and outbreak response</p>
-          <div className="flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600">
-            <Clock size={16} />
-            {minutes}:{seconds.toString().padStart(2, "0")}
+        <div className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200/80 bg-white/80 px-4 py-3.5 shadow-sm backdrop-blur-lg sm:px-6">
+          <p className="text-xs sm:text-sm font-bold tracking-wide text-slate-800">
+            <span className="mr-2 inline-block h-2 w-2 rounded-full bg-teal-500 animate-pulse" />
+            AI-assisted infection monitoring and outbreak response
+          </p>
+          <div className="flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50/80 px-3.5 py-1.5 text-xs font-bold text-sky-900 shadow-inner">
+            <Clock size={15} className="text-sky-700" />
+            <span>{minutes}:{seconds.toString().padStart(2, "0")}</span>
           </div>
         </div>
         <div className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
