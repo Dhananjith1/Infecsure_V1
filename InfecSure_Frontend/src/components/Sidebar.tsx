@@ -134,10 +134,12 @@ export function Sidebar() {
           );
         })}
       </nav>
-      <div className="border-t border-slate-200/80 p-4.5 bg-gradient-to-t from-slate-50 to-white">
-        <p className="truncate text-sm font-bold text-slate-900">{user?.full_name || user?.email}</p>
-        <p className="mb-3 text-[10px] font-extrabold uppercase tracking-wider text-teal-800">{role || "signed in"}</p>
-        <Button variant="ghost" className="w-full justify-start rounded-xl font-bold hover:bg-rose-50 hover:text-rose-700" icon={<LogOut size={18} />} onClick={logout}>
+      <div className="border-t border-slate-200/80 p-5 bg-gradient-to-t from-slate-50 via-white to-white">
+        <div className="rounded-xl border border-slate-200/80 bg-white/80 p-3.5 shadow-sm backdrop-blur-sm">
+          <p className="truncate text-sm font-bold text-slate-900">{user?.full_name || user?.email}</p>
+          <p className="text-[10px] font-extrabold uppercase tracking-wider text-teal-800">{role || "signed in"}</p>
+        </div>
+        <Button variant="ghost" className="mt-3 w-full justify-start rounded-xl font-bold text-slate-700 hover:bg-rose-50 hover:text-rose-700" icon={<LogOut size={18} />} onClick={logout}>
           Logout
         </Button>
       </div>

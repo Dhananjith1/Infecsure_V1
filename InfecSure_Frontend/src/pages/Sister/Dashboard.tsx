@@ -420,7 +420,7 @@ export function SisterDashboard() {
               </CardBody>
             </Card>
             <Card>
-              <CardHeader title="Recent Validated Alerts" description="Latest ICNO-approved summaries." />
+              <CardHeader title="Recent Validated Alerts & Doctor Instructions" description="Latest ICNO-approved summaries and Supervising Doctor management instructions." />
               <CardBody className="space-y-3">
                 {filteredAlerts.slice(0, 3).map((alert) => (
                   <article key={alert.alert_id} className="rounded-md border border-slate-200 p-3">
@@ -428,6 +428,11 @@ export function SisterDashboard() {
                       <div>
                         <p className="font-semibold text-slate-950">{alert.title}</p>
                         <p className="mt-1 text-xs font-semibold uppercase text-slate-500">{alert.ward_id || "Hospital-wide"}</p>
+                        {alert.doctor_instructions ? (
+                          <div className="mt-2 rounded bg-amber-50 p-2 text-xs font-medium text-amber-900 border border-amber-200">
+                            <strong>👨‍⚕️ Doctor Instruction:</strong> {alert.doctor_instructions}
+                          </div>
+                        ) : null}
                       </div>
                       <StatusBadge status={alert.status} />
                     </div>

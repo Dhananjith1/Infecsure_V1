@@ -78,17 +78,30 @@ def create_lab_result(
     result_id = fs.create_lab_result(data)
 
     alert_id = None
-    if anomaly["is_anomaly"]:
+    is_positive = str(body.test_result).strip().lower() == "positive"
+
+    if anomaly["is_anomaly"] or is_positive:
+        if anomaly["is_anomaly"]:
+            title = f"Pathogen Anomaly - {body.pathogen_name} in {ward.get('name', body.ward_id)}"
+            description = anomaly["message"]
+            severity = anomaly["severity"] or "warning"
+        else:
+            title = f"New Lab Result Flagged - {body.pathogen_name} in {ward.get('name', body.ward_id)}"
+            description = f"Positive {body.pathogen_name} result recorded for BHT {body.patient_ward_location or 'N/A'}. Pending ICNO review."
+            severity = "medium"
+
         alert_id = fs.create_alert({
-            "alert_type": "anomaly",
+            "alert_type": "lab_result",
             "ward_id": body.ward_id,
-            "title": f"Pathogen Anomaly - {body.pathogen_name} in {ward.get('name', body.ward_id)}",
-            "description": anomaly["message"],
-            "severity": anomaly["severity"] or "warning",
+            "title": title,
+            "description": description,
+            "severity": severity,
             "source_data": {
                 "result_id": result_id,
                 "pathogen_id": body.pathogen_id,
                 "pathogen_name": body.pathogen_name,
+                "test_result": body.test_result,
+                "patient_ward_location": body.patient_ward_location,
                 "z_score": anomaly["z_score"],
                 "colony_count": colony_count,
             },

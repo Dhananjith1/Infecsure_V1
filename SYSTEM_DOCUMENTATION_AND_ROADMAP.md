@@ -130,6 +130,18 @@ Access frontend at `http://localhost:5173`.
 | **2026-07-22 18:50** | Backend Report Lookup Fix: Enhanced `_find_report_record` in `app/routers/reports.py` to sanitize `.pdf` extensions in download URLs and resolve files seamlessly from both Firestore and local disk fallback. | `app/routers/reports.py`, `SYSTEM_DOCUMENTATION_AND_ROADMAP.md` | ✅ Resolved & Working |
 | **2026-07-22 18:52** | Report Resolution & Auto-Regeneration: Fixed `_report_filepath` and `_regenerate_executive_file` in `app/routers/reports.py` to automatically regenerate missing Dengue PDF files on-the-fly if a file is requested from historic records. | `app/routers/reports.py`, `SYSTEM_DOCUMENTATION_AND_ROADMAP.md` | ✅ Fixed & Auto-Regenerating |
 | **2026-07-22 18:55** | PDF Table Formatting Fix: Cleaned long raw UUID strings (`ward_0996f73e...`) into clean ward labels and adjusted ReportLab table column widths to prevent text overlapping in generated PDF documents. | `app/services/report_service.py`, `SYSTEM_DOCUMENTATION_AND_ROADMAP.md` | ✅ Formatted & Aligned |
+| **2026-07-22 19:03** | Management Instructions API Fix: Added missing `GET /alerts/management-instructions` endpoint in `app/routers/alerts.py` to allow the Doctor, ICNO, and Sister dashboards to load recorded ward instructions from Firestore. | `app/routers/alerts.py`, `SYSTEM_DOCUMENTATION_AND_ROADMAP.md` | ✅ Added & Loading Live |
+| **2026-07-22 19:10** | Clinical Workflow Integration: Linked Doctor management instructions directly to the Nursing Sister Dashboard (`Recent Validated Alerts & Doctor Instructions`) and ICNO Audit views for immediate ward protocol execution. | `InfecSure_Frontend/src/pages/Sister/Dashboard.tsx`, `SYSTEM_DOCUMENTATION_AND_ROADMAP.md` | ✅ Integrated & Connected |
+| **2026-07-22 19:24** | E2E Clinical Workflow Verification: Tested Doctor instruction creation, backend Firestore storage, and multi-role dashboard sync via browser subagent automation. | `app/routers/alerts.py`, `InfecSure_Frontend/src/pages/Doctor/Dashboard.tsx`, `SYSTEM_DOCUMENTATION_AND_ROADMAP.md` | ✅ 100% Verified Working |
+| **2026-07-22 19:31** | Sidebar Layout Alignment: Wrapped user profile name and role badge in a padded card container (`p-5`, `p-3.5`, `rounded-xl`, `border`) in `Sidebar.tsx` to prevent text sticking against the left edge. | `InfecSure_Frontend/src/components/Sidebar.tsx`, `SYSTEM_DOCUMENTATION_AND_ROADMAP.md` | ✅ Fixed & Padded |
+| **2026-07-22 19:50** | ICNO Pending Approval Gate Audit: Verified automatic alert generation triggers across Lab Anomaly Detection, Ward Audit Compliance Failures, and OCR MoH Notifications into the ICNO Validation Queue. | `app/services/domain_service.py`, `InfecSure_Frontend/src/pages/ICNO/ValidationInbox.tsx`, `SYSTEM_DOCUMENTATION_AND_ROADMAP.md` | ✅ 100% Verified Live |
+| **2026-07-22 20:18** | Lab Result Validation Gate Fix: Updated `create_lab_result()` in `app/services/domain_service.py` to trigger ICNO Pending Validation Gate alerts for positive pathogen test submissions as well as statistical Z-score anomalies. Verified live via browser automation. | `app/services/domain_service.py`, `SYSTEM_DOCUMENTATION_AND_ROADMAP.md` | ✅ Fixed & Verified Live |
+
+
+
+
+
+
 
 
 
