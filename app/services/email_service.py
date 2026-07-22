@@ -89,9 +89,19 @@ def send_authorized_report_email(
         if cc:
             msg["Cc"] = ", ".join(cc)
 
-        plain_text = body_html.replace("<br>", "\n").replace("<p>", "\n").replace("</p>", "")
-        msg.attach(MIMEText(plain_text, "plain"))
-        msg.attach(MIMEText(body_html, "html"))
+        plain_text = (
+            body_html.replace("<br>", "\n")
+            .replace("<h2>", "\n")
+            .replace("</h2>", "\n")
+            .replace("<p>", "\n")
+            .replace("</p>", "")
+            .replace("<html><body style=\"font-family: Arial, sans-serif; color: #333;\">", "")
+            .replace("</body></html>", "")
+            .strip()
+        )
+
+        msg.attach(MIMEText(plain_text, "plain", "utf-8"))
+        msg.attach(MIMEText(body_html, "html", "utf-8"))
 
         attachment = MIMEBase("application", "pdf")
         attachment.set_payload(attachment_bytes)
