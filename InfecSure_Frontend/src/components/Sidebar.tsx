@@ -80,8 +80,8 @@ export function Sidebar() {
     <aside className="flex w-full flex-col border-b border-slate-200 bg-white lg:min-h-screen lg:w-72 lg:border-b-0 lg:border-r">
       <div className="border-b border-slate-200 p-5">
         <div className="flex items-center gap-3">
-          <div className="grid h-11 w-11 place-items-center rounded-lg bg-clinical-700 text-white">
-            <Activity size={22} />
+          <div className="grid h-11 w-11 place-items-center rounded-lg bg-white p-1 shadow-sm border border-slate-200">
+            <img src="/logo.png" alt="InfecSure Logo" className="h-full w-full object-contain" />
           </div>
           <div>
             <p className="text-lg font-bold text-slate-950">InfecSure</p>
