@@ -20,7 +20,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Application-wide settings loaded from .env"""
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",  # Ignores extraneous env vars without raising validation errors
+    )
 
     # JWT
     jwt_secret_key: str = "infecsure-production-secret-key-2026"
@@ -38,6 +42,13 @@ class Settings(BaseSettings):
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""
+
+    # Seed Passwords
+    seed_icno_password: str = "icno@123"
+    seed_sister_password: str = "matron@123#N"
+    seed_lab_password: str = "lab@123#N"
+    seed_doctor_password: str = "doctor@123#N"
+    seed_staff_password: str = "staff@123#N"
 
     # App
     app_env: str = "development"
@@ -107,6 +118,7 @@ def firebase_init_error() -> str | None:
     if _firebase_init_error is None:
         return None
     return str(_firebase_init_error)
+
 
 # ─── Clients exposed to the rest of the app ──────────────────────────────────
 
