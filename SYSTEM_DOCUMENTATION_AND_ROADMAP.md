@@ -124,6 +124,18 @@ Access frontend at `http://localhost:5173`.
 | **2026-07-22 18:14** | Email Dispatch Formatting Fix: Updated email service to construct proper `multipart/mixed` and `multipart/alternative` MIME structures with clean inline responsive HTML templates, eliminating raw HTML code tags in client text previews. | `app/services/email_service.py`, `app/routers/reports.py`, `SYSTEM_DOCUMENTATION_AND_ROADMAP.md` | ✅ Fixed & Applied |
 | **2026-07-22 18:26** | E2E Email Dispatch Verification: Confirmed backend SMTP dispatch, PDF attachment encoding, and responsive HTML email templates operate cleanly without errors. | `app/services/email_service.py`, `SYSTEM_DOCUMENTATION_AND_ROADMAP.md` | ✅ Verified Live (SMTP Active) |
 | **2026-07-22 18:31** | Full Code Restoration: Reverted email dispatch code in `reports.py` and `email_service.py` to its original working state, resolving the backend network error while stripping raw HTML tags cleanly from plain-text email previews. | `app/services/email_service.py`, `app/routers/reports.py`, `SYSTEM_DOCUMENTATION_AND_ROADMAP.md` | ✅ Restored & Verified Working |
+| **2026-07-22 18:38** | Purpose Explanation: Explained the function of the "Confirm Ward Instruction" modal in the Supervising Doctor Dashboard. | `SYSTEM_DOCUMENTATION_AND_ROADMAP.md` | ✅ Documented & Explained |
+| **2026-07-22 18:41** | UI/UX Refinement: Removed technical developer selector (`Backend endpoint`) from Doctor instruction modal in favor of clean clinical form inputs. | `InfecSure_Frontend/src/pages/Doctor/Dashboard.tsx`, `SYSTEM_DOCUMENTATION_AND_ROADMAP.md` | ✅ Refined & User Friendly |
+| **2026-07-22 18:46** | PDF Download Extension Fix: Enforced automatic `.pdf` extension append in `downloadReport` and `downloadDoctorReport` frontend helpers to guarantee all generated reports download as valid `.pdf` files. | `InfecSure_Frontend/src/api/reports.ts`, `InfecSure_Frontend/src/pages/Doctor/Dashboard.tsx`, `SYSTEM_DOCUMENTATION_AND_ROADMAP.md` | ✅ Fixed & Enforced |
+| **2026-07-22 18:50** | Backend Report Lookup Fix: Enhanced `_find_report_record` in `app/routers/reports.py` to sanitize `.pdf` extensions in download URLs and resolve files seamlessly from both Firestore and local disk fallback. | `app/routers/reports.py`, `SYSTEM_DOCUMENTATION_AND_ROADMAP.md` | ✅ Resolved & Working |
+| **2026-07-22 18:52** | Report Resolution & Auto-Regeneration: Fixed `_report_filepath` and `_regenerate_executive_file` in `app/routers/reports.py` to automatically regenerate missing Dengue PDF files on-the-fly if a file is requested from historic records. | `app/routers/reports.py`, `SYSTEM_DOCUMENTATION_AND_ROADMAP.md` | ✅ Fixed & Auto-Regenerating |
+| **2026-07-22 18:55** | PDF Table Formatting Fix: Cleaned long raw UUID strings (`ward_0996f73e...`) into clean ward labels and adjusted ReportLab table column widths to prevent text overlapping in generated PDF documents. | `app/services/report_service.py`, `SYSTEM_DOCUMENTATION_AND_ROADMAP.md` | ✅ Formatted & Aligned |
+
+
+
+
+
+
 
 
 

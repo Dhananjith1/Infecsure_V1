@@ -94,7 +94,11 @@ export function DoctorDashboard() {
 
   async function downloadDoctorReport(report: Pick<DoctorReport, "download_url" | "filename" | "report_id">) {
     try {
-      await downloadReport(report.download_url, report.filename || `${report.report_id}.pdf`);
+      let fname = report.filename || `${report.report_id}.pdf`;
+      if (!fname.toLowerCase().endsWith(".pdf") && !fname.toLowerCase().endsWith(".xlsx")) {
+        fname = `${fname}.pdf`;
+      }
+      await downloadReport(report.download_url, fname);
     } catch (err) {
       showToast({ type: "error", title: "Download failed", message: apiErrorMessage(err) });
     }
@@ -299,19 +303,11 @@ export function DoctorDashboard() {
           </div>
           <label className="block">
             <span className="text-sm font-semibold text-slate-700">Acknowledgement notes</span>
-            <input className="mt-1 min-h-12 w-full rounded-md border border-slate-300 px-3" value={notes} onChange={(event) => setNotes(event.target.value)} />
-          </label>
-          <label className="block">
-            <span className="text-sm font-semibold text-slate-700">Backend endpoint</span>
-            <select className="mt-1 min-h-12 w-full rounded-md border border-slate-300 px-3" value={ackMode} onChange={(event) => setAckMode(event.target.value as typeof ackMode)}>
-              <option value="instructions">/alerts/:id/instructions</option>
-              <option value="doctor-acknowledge">/alerts/:id/doctor-acknowledge</option>
-              <option value="acknowledge">/alerts/:id/acknowledge</option>
-            </select>
+            <input className="mt-1 min-h-12 w-full rounded-md border border-slate-300 px-3" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Optional doctor notes" />
           </label>
           <label className="block">
             <span className="text-sm font-semibold text-slate-700">Management instruction</span>
-            <textarea className="mt-1 min-h-32 w-full rounded-md border border-slate-300 p-3" value={message} onChange={(event) => setMessage(event.target.value)} required placeholder="Ward 03 - initiate isolation protocol" />
+            <textarea className="mt-1 min-h-32 w-full rounded-md border border-slate-300 p-3" value={message} onChange={(event) => setMessage(event.target.value)} required placeholder="e.g. Ward 03 - initiate isolation protocol & increase fluid monitoring" />
           </label>
         </form>
       </Modal>
