@@ -96,19 +96,31 @@ def list_collection(
     if filters:
         for field, op, value in filters:
             ref = ref.where(field, op, value)
-    if order_by:
-        if order_by.startswith("-"):
-            from google.cloud.firestore_v1 import Query
-            ref = ref.order_by(order_by[1:], direction=Query.DESCENDING)
-        else:
-            ref = ref.order_by(order_by)
-    ref = ref.limit(limit)
+
+    # Fetch batch to ensure mixed String/Timestamp types in Firestore indexes don't hide new records
+    fetch_limit = max(limit * 5, 500) if order_by else limit
+    ref = ref.limit(fetch_limit)
     docs = ref.stream()
     result = []
     for doc in docs:
         d = _doc_to_dict(doc)
         if d:
             result.append(d)
+
+    if order_by:
+        is_desc = order_by.startswith("-")
+        field_name = order_by[1:] if is_desc else order_by
+
+        def _sort_key(item: dict) -> str:
+            val = item.get(field_name)
+            if isinstance(val, datetime):
+                dt = val if val.tzinfo else val.replace(tzinfo=timezone.utc)
+                return dt.isoformat()
+            return str(val or "")
+
+        result.sort(key=_sort_key, reverse=is_desc)
+
+    result = result[:limit]
     _LIST_CACHE[key] = (monotonic(), [dict(item) for item in result])
     return result
 
@@ -212,7 +224,7 @@ def get_lab_result(result_id: str) -> Optional[dict]:
 
 def list_lab_results(ward_id: Optional[str] = None, limit: int = 100) -> list[dict]:
     filters = [("ward_id", "==", ward_id)] if ward_id else None
-    return list_collection("lab_results", filters=filters, order_by="created_at", limit=limit)
+    return list_collection("lab_results", filters=filters, order_by="-created_at", limit=limit)
 
 
 def count_positive_cultures_48h(ward_id: str, pathogen_id: Optional[str] = None) -> int:

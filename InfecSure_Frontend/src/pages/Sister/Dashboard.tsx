@@ -69,6 +69,10 @@ function isoDateDaysAgo(days: number) {
 
 function toDateKey(value?: string) {
   if (!value) return "";
+  if (typeof value === "string") {
+    const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (match) return match[1];
+  }
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return String(value).slice(0, 10);
   return localDateKey(parsed);
@@ -189,9 +193,9 @@ export function SisterDashboard() {
       setDailyErrors({});
 
       const [auditResult, alertsResult, labResult] = await Promise.allSettled([
-        listAudits({ timeout: FAST_FEED_TIMEOUT, limit: 40 }),
-        listAlerts("approved", { timeout: FAST_FEED_TIMEOUT, limit: 40 }),
-        listLabResults(undefined, { timeout: FAST_FEED_TIMEOUT, limit: 40 }),
+        listAudits({ timeout: FAST_FEED_TIMEOUT, limit: 100 }),
+        listAlerts("approved", { timeout: FAST_FEED_TIMEOUT, limit: 100 }),
+        listLabResults(undefined, { timeout: FAST_FEED_TIMEOUT, limit: 100 }),
       ]);
       if (!mounted) return;
       if (auditResult.status === "fulfilled") {
@@ -295,26 +299,50 @@ export function SisterDashboard() {
       if (result.anomaly?.is_anomaly) row.anomalyCount += 1;
       byDate.set(label, row);
     });
+    filteredAlerts.forEach((alert) => {
+      const label = toDateKey(alert.created_at) || "Undated";
+      const row = byDate.get(label) || { label, count: 0, anomalyCount: 0 };
+      if (!filteredLab.some((l) => toDateKey(l.result_date || l.created_at) === label)) {
+        row.count += 1;
+      }
+      if (alert.severity === "high" || alert.severity === "critical") row.anomalyCount += 1;
+      byDate.set(label, row);
+    });
     return Array.from(byDate.values()).sort((a, b) => a.label.localeCompare(b.label)).slice(-10);
-  }, [filteredLab]);
+  }, [filteredAlerts, filteredLab]);
 
   const wardDistribution = useMemo(() => {
     const counts = new Map<string, number>();
     filteredLab.forEach((result) => counts.set(result.ward_id, (counts.get(result.ward_id) || 0) + 1));
+    filteredAlerts.forEach((alert) => {
+      if (alert.ward_id && alert.ward_id !== "hospital-wide") {
+        counts.set(alert.ward_id, (counts.get(alert.ward_id) || 0) + 1);
+      }
+    });
     return Array.from(counts.entries())
       .map(([wardId, count]) => ({ label: labelForWard(wardId, wards), count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 6);
-  }, [filteredLab, wards]);
+  }, [filteredAlerts, filteredLab, wards]);
 
   const pathogenDistribution = useMemo(() => {
     const counts = new Map<string, number>();
-    filteredLab.forEach((result) => counts.set(result.pathogen_name, (counts.get(result.pathogen_name) || 0) + 1));
+    filteredLab.forEach((result) => {
+      if (result.pathogen_name) {
+        counts.set(result.pathogen_name, (counts.get(result.pathogen_name) || 0) + 1);
+      }
+    });
+    filteredAlerts.forEach((alert) => {
+      const pName = alert.source_data?.pathogen_name || (alert.title?.includes("Dengue") ? "Dengue" : undefined);
+      if (pName && typeof pName === "string") {
+        counts.set(pName, (counts.get(pName) || 0) + 1);
+      }
+    });
     return Array.from(counts.entries())
       .map(([label, count]) => ({ label, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 6);
-  }, [filteredLab]);
+  }, [filteredAlerts, filteredLab]);
 
   const dailyAudits = useMemo(() => {
     return audits
@@ -580,17 +608,17 @@ export function SisterDashboard() {
                 </div>
               ) : null}
 
-              <div className="overflow-x-auto rounded-md border border-slate-200">
+              <div className="max-h-[420px] overflow-x-auto overflow-y-auto rounded-md border border-slate-200 shadow-xs">
                 <table className="min-w-full divide-y divide-slate-200 text-sm">
-                  <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+                  <thead className="sticky top-0 z-10 bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500 shadow-xs">
                     <tr>
-                      <th className="px-4 py-3">Ward</th>
-                      <th className="px-4 py-3">Overall</th>
-                      <th className="px-4 py-3">Hand hygiene</th>
-                      <th className="px-4 py-3">PPE</th>
-                      <th className="px-4 py-3">Waste</th>
-                      <th className="px-4 py-3">Environment</th>
-                      <th className="px-4 py-3">ICNO</th>
+                      <th className="bg-slate-50 px-4 py-3">Ward</th>
+                      <th className="bg-slate-50 px-4 py-3">Overall</th>
+                      <th className="bg-slate-50 px-4 py-3">Hand hygiene</th>
+                      <th className="bg-slate-50 px-4 py-3">PPE</th>
+                      <th className="bg-slate-50 px-4 py-3">Waste</th>
+                      <th className="bg-slate-50 px-4 py-3">Environment</th>
+                      <th className="bg-slate-50 px-4 py-3">ICNO</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
