@@ -56,10 +56,12 @@ _TASK_PRIORITY_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 def _risk_level_from_score(score: float) -> str:
     if score < 33.0:
         return "low"
-    elif score <= 66.0:
+    elif score < 60.0:
         return "medium"
-    else:
+    elif score < 80.0:
         return "high"
+    else:
+        return "critical"
 
 
 def _pathogen_risk_to_numeric(risk_level: str) -> float:
@@ -265,22 +267,19 @@ def predict_outbreak_risk(ward_id: str, new_audit: Optional[dict] = None) -> dic
     risk_probability = float(proba[1])
     risk_score_percent = risk_probability * 100
     risk_level = _risk_level_from_score(risk_score_percent)
-    # -----------------------------------------------------------------
-    # Compliance‑based fallback override:
-    # If a new audit is provided and its overall compliance is in the
-    # medium range (33‑66%) but the model predicts a low risk (<33%),
-    # elevate the risk to Medium to satisfy UI expectations.
-    # -----------------------------------------------------------------
-    if new_audit:
-        compliance = new_audit.get("overall_compliance_score", 100.0)
-        if 33.0 <= compliance <= 66.0 and risk_score_percent < 33.0:
-            logger.info(
-                "Compliance fallback: compliance %.1f%% forces Medium risk for ward %s",
-                compliance,
-                ward_id,
-            )
-            risk_score_percent = max(risk_score_percent, 33.0)
-            risk_level = "medium"
+    # Compliance-based override: if compliance is in medium range, enforce medium risk and minimum score
+    compliance_score = target_fv.get("compliance_score", 100.0)
+    if 33.0 <= compliance_score <= 66.0:
+        # Force medium risk level
+        risk_level = "medium"
+        if risk_score_percent < 33.0:
+            risk_score_percent = 33.0
+            risk_probability = risk_score_percent / 100.0
+    else:
+        # Ensure medium risk from model also respects minimum score
+        if risk_level == "medium" and risk_score_percent < 33.0:
+            risk_score_percent = 33.0
+            risk_probability = risk_score_percent / 100.0
 
 
     # ── Feature Importance Extraction (NEW) ──

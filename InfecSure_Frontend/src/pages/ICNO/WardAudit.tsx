@@ -125,11 +125,7 @@ export function WardAudit() {
       } else {
         await createAudit(payload);
         showToast({ type: "success", title: "Audit submitted", message: "Compliance and risk calculations were sent for validation." });
-        // Delay navigation to allow backend DB writes to settle and bust cache with a unique timestamp.
-        setTimeout(() => {
-          const ts = Date.now();
-          navigate(`/icno?tab=heatmap&ts=${ts}`);
-        }, 200);
+        navigate(".", { replace: true });
       }
     } catch (err) {
       await saveAuditOffline(`Live submit failed: ${apiErrorMessage(err)}. It will sync when the backend/database is available.`);

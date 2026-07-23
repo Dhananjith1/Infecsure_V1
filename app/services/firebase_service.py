@@ -164,9 +164,13 @@ def list_wards() -> list[dict]:
     return allowed_wards
 
 
+
 def update_ward_risk(ward_id: str, risk_score: float, risk_level: str, compliance_score: float) -> None:
     if ward_id not in ALLOWED_WARD_IDS:
         return
+    # Ensure medium risk always has a minimum score of 33% (0.33 probability)
+    if risk_level == "medium" and risk_score < 0.33:
+        risk_score = 0.33
     update_document("wards", ward_id, {
         "risk_score": risk_score,
         "risk_level": risk_level,
