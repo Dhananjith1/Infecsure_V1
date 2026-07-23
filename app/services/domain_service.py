@@ -35,9 +35,9 @@ def _resolve_ward_id(payload: dict[str, Any]) -> None:
     payload["ward_name"] = normalized
 
 
-def _run_risk_prediction(ward_id: str) -> Optional[dict[str, Any]]:
+def _run_risk_prediction(ward_id: str, new_audit: Optional[dict] = None) -> Optional[dict[str, Any]]:
     try:
-        return ml_service.predict_outbreak_risk(ward_id)
+        return ml_service.predict_outbreak_risk(ward_id, new_audit=new_audit)
     except Exception:
         return None
 
@@ -181,7 +181,17 @@ def create_audit(
             "target_roles": ["icno", "sister"],
         })
 
-    risk_prediction = _run_risk_prediction(body.ward_id)
+    risk_prediction = _run_risk_prediction(body.ward_id, data)
+    # Ensure ward document is updated with the latest risk info before returning.
+    if risk_prediction:
+        fs.update_ward_risk(
+            body.ward_id,
+            risk_prediction.get("risk_score", 0.0),
+            risk_prediction.get("risk_level", "low"),
+            data.get("overall_compliance_score", 100.0),
+        )
+
+    ml_service.clear_task_priority_cache()
 
     return {
         "audit_id": audit_id,

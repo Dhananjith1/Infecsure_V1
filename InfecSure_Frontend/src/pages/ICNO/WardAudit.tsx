@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Save, WifiOff } from "lucide-react";
 import { createAudit, type AuditPayload, type CompliancePayload } from "../../api/audits";
 import { apiErrorMessage } from "../../api/client";
@@ -53,6 +53,7 @@ const fallbackWards: HeatmapWard[] = [
 ];
 
 export function WardAudit() {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [wardId, setWardId] = useState(searchParams.get("ward") || "etu");
   const [remarks, setRemarks] = useState("");
@@ -124,6 +125,11 @@ export function WardAudit() {
       } else {
         await createAudit(payload);
         showToast({ type: "success", title: "Audit submitted", message: "Compliance and risk calculations were sent for validation." });
+        // Delay navigation to allow backend DB writes to settle and bust cache with a unique timestamp.
+        setTimeout(() => {
+          const ts = Date.now();
+          navigate(`/icno?tab=heatmap&ts=${ts}`);
+        }, 200);
       }
     } catch (err) {
       await saveAuditOffline(`Live submit failed: ${apiErrorMessage(err)}. It will sync when the backend/database is available.`);

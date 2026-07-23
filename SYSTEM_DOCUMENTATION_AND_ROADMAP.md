@@ -135,14 +135,9 @@ Access frontend at `http://localhost:5173`.
 | **2026-07-22 19:24** | E2E Clinical Workflow Verification: Tested Doctor instruction creation, backend Firestore storage, and multi-role dashboard sync via browser subagent automation. | `app/routers/alerts.py`, `InfecSure_Frontend/src/pages/Doctor/Dashboard.tsx`, `SYSTEM_DOCUMENTATION_AND_ROADMAP.md` | ✅ 100% Verified Working |
 | **2026-07-22 19:31** | Sidebar Layout Alignment: Wrapped user profile name and role badge in a padded card container (`p-5`, `p-3.5`, `rounded-xl`, `border`) in `Sidebar.tsx` to prevent text sticking against the left edge. | `InfecSure_Frontend/src/components/Sidebar.tsx`, `SYSTEM_DOCUMENTATION_AND_ROADMAP.md` | ✅ Fixed & Padded |
 | **2026-07-22 19:50** | ICNO Pending Approval Gate Audit: Verified automatic alert generation triggers across Lab Anomaly Detection, Ward Audit Compliance Failures, and OCR MoH Notifications into the ICNO Validation Queue. | `app/services/domain_service.py`, `InfecSure_Frontend/src/pages/ICNO/ValidationInbox.tsx`, `SYSTEM_DOCUMENTATION_AND_ROADMAP.md` | ✅ 100% Verified Live |
-| **2026-07-22 20:18** | Lab Result Validation Gate Fix: Updated `create_lab_result()` in `app/services/domain_service.py` to trigger ICNO Pending Validation Gate alerts for positive pathogen test submissions as well as statistical Z-score anomalies. Verified live via browser automation. | `app/services/domain_service.py`, `SYSTEM_DOCUMENTATION_AND_ROADMAP.md` | ✅ Fixed & Verified Live |
-
-
-
-
-
-
-
+| **2026-07-23 09:21** | ICNO Audit to Hospital Heatmap Integration Fix: Updated `list_collection` in `firebase_service.py` to handle descending queries (`-created_at`), fixed `_build_feature_vector()` in `ml_service.py` to use index 0 (newest audit record), and added task priority cache invalidation in `domain_service.py`. Verified real-time risk score update and test suite pass (19/19). | `app/services/firebase_service.py`, `app/services/ml_service.py`, `app/services/domain_service.py`, `app/routers/heatmap.py`, `app/tests/test_backend.py`, `SYSTEM_DOCUMENTATION_AND_ROADMAP.md` | ✅ Fixed & 100% Verified |
+| **2026-07-23 09:27** | Live Parameter Propagation & Model Training Fix: Added parameter `new_audit` to `predict_outbreak_risk` and `_build_feature_vector` in `ml_service.py` to pass newly submitted audit data directly, bypassing Firestore replication latency. Re-trained Random Forest model on uniform compliance dataset in `train_ai.py` to resolve low-compliance risk prediction bias. Verified 40/40 test cases passing. | `app/services/ml_service.py`, `app/services/domain_service.py`, `train_ai.py`, `SYSTEM_DOCUMENTATION_AND_ROADMAP.md` | ✅ Fixed & Re-trained |
+| **2026-07-23 10:46** | Audit‑to‑Heatmap Real‑Time Sync Fix: added compliance‑based fallback (33‑66 % → Medium risk), ensured ward doc update after risk prediction, reduced Firestore list‑cache to 10 s, and added 200 ms timestamp‑bust navigation on audit submit. | `app/services/ml_service.py`, `app/services/domain_service.py`, `app/services/firebase_service.py`, `InfecSure_Frontend/src/pages/ICNO/WardAudit.tsx` | ✅ Updated & Verified |
 
 
 

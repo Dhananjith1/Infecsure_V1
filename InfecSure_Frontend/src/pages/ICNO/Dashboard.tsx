@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { BarChart3, Camera, ClipboardCheck, LayoutDashboard, ShieldCheck, TrendingUp } from "lucide-react";
 import { dashboardSummary, getRootCauseInsights, listPendingAlerts } from "../../api/alerts";
 import { getHeatmap, getPublicHeatmap } from "../../api/heatmap";
@@ -25,6 +25,8 @@ export function ICNODashboard() {
   const [heatmapLoading, setHeatmapLoading] = useState(true);
   const [priorityLoading, setPriorityLoading] = useState(true);
   const [insightLoading, setInsightLoading] = useState(true);
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get("tab");
 
   useEffect(() => {
     let mounted = true;

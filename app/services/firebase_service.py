@@ -17,7 +17,7 @@ from google.cloud.firestore_v1 import DocumentSnapshot
 from app.config import db
 from app.models.ward import ALLOWED_WARD_IDS, normalize_ward_name, ward_type_for_name
 
-FIRESTORE_LIST_CACHE_SECONDS = 45
+FIRESTORE_LIST_CACHE_SECONDS = 10  # reduced for fresher ward data
 _LIST_CACHE: dict[tuple, tuple[float, list[dict]]] = {}
 
 
@@ -97,7 +97,11 @@ def list_collection(
         for field, op, value in filters:
             ref = ref.where(field, op, value)
     if order_by:
-        ref = ref.order_by(order_by)
+        if order_by.startswith("-"):
+            from google.cloud.firestore_v1 import Query
+            ref = ref.order_by(order_by[1:], direction=Query.DESCENDING)
+        else:
+            ref = ref.order_by(order_by)
     ref = ref.limit(limit)
     docs = ref.stream()
     result = []
@@ -183,11 +187,11 @@ def get_audit(audit_id: str) -> Optional[dict]:
 
 
 def list_audits_for_ward(ward_id: str, limit: int = 50) -> list[dict]:
-    return list_collection("audits", filters=[("ward_id", "==", ward_id)], order_by="created_at", limit=limit)
+    return list_collection("audits", filters=[("ward_id", "==", ward_id)], order_by="-created_at", limit=limit)
 
 
 def list_all_audits(limit: int = 100) -> list[dict]:
-    return list_collection("audits", order_by="created_at", limit=limit)
+    return list_collection("audits", order_by="-created_at", limit=limit)
 
 
 # ─── Domain: Lab Results ──────────────────────────────────────────────────────
