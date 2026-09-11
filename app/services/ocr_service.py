@@ -135,8 +135,62 @@ def _decode_image(img_bytes: bytes):
     return img
 
 
+def _deskew(gray_image):
+    """Correct rotation angle using OpenCV minAreaRect on thresholded contours.
+
+    Computes the dominant text-line angle from the minimum-area bounding
+    rectangle of the largest contour cluster, then applies an affine
+    rotation to straighten the image.  Angles beyond ±15° are ignored
+    (likely not simple skew but a fundamentally rotated photo).
+    """
+    import cv2  # noqa: PLC0415
+    import numpy as np  # noqa: PLC0415
+
+    try:
+        # Binary threshold to isolate text regions
+        _, binary = cv2.threshold(gray_image, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+
+        # Find all contour points (external only for speed)
+        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return gray_image
+
+        # Merge all contour points into one set and compute minAreaRect
+        all_points = np.concatenate(contours)
+        rect = cv2.minAreaRect(all_points)
+        angle = rect[-1]  # rotation angle from minAreaRect
+
+        # minAreaRect returns angles in [-90, 0); normalise to skew offset
+        if angle < -45:
+            angle = 90 + angle  # landscape → correct direction
+        elif angle > 45:
+            angle = angle - 90
+
+        # Skip correction for large angles (not simple skew)
+        if abs(angle) < 0.5 or abs(angle) > 15:
+            return gray_image
+
+        h, w = gray_image.shape[:2]
+        center = (w // 2, h // 2)
+        rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+        deskewed = cv2.warpAffine(
+            gray_image, rotation_matrix, (w, h),
+            flags=cv2.INTER_CUBIC,
+            borderMode=cv2.BORDER_REPLICATE,
+        )
+        logger.info("Deskewed image by %.2f°", angle)
+        return deskewed
+    except Exception as exc:
+        logger.warning("Deskew failed (non-fatal): %s", exc)
+        return gray_image
+
+
 def _preprocess_variants(img_bytes: bytes):
-    """Build several OCR images for faint handwriting and camera photos."""
+    """Build several OCR images for faint handwriting and camera photos.
+
+    Pipeline: decode → resize → grayscale → deskew → CLAHE → denoise →
+    sharpen → adaptive threshold / Otsu threshold.
+    """
     try:
         import cv2  # noqa: PLC0415
     except ImportError:
@@ -150,6 +204,9 @@ def _preprocess_variants(img_bytes: bytes):
     scale = 2.0 if max(height, width) < 1800 else 1.35
     enlarged = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
     gray = cv2.cvtColor(enlarged, cv2.COLOR_BGR2GRAY)
+
+    # Deskew the grayscale image before further processing
+    gray = _deskew(gray)
 
     clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8)).apply(gray)
     denoised = cv2.fastNlMeansDenoising(clahe, None, 12, 7, 21)
@@ -244,26 +301,79 @@ def _extract_moh_fields(raw_text: str) -> dict[str, Any]:
 
 
 def _extract_audit_fields(raw_text: str) -> dict[str, Any]:
-    from datetime import datetime, timezone
+    """Extract the 6 ICNO audit fields expected by the frontend UI cards.
+
+    Target keys: ward_name, hand_hygiene, ppe_compliance,
+    waste_garbage_removal, environmental_hygiene, icno_additional_note.
+    """
+    from datetime import datetime, timezone  # noqa: PLC0415
+
     fields: dict[str, Any] = {}
     text_lower = raw_text.lower()
 
+    # ── Ward Name ──────────────────────────────────────────────────────────
     ward = _smart_extract_ward(text_lower)
     if ward:
-        fields["ward_id"] = ward
+        # Convert snake_case ID to a human-friendly label
+        fields["ward_name"] = ward.replace("_", " ").title()
+    else:
+        ward_match = re.search(
+            r"(?i)\b(?:ward|word|wad)\s*[:\-]?\s*([A-Za-z][A-Za-z _/\-]{1,40})",
+            raw_text,
+        )
+        fields["ward_name"] = ward_match.group(1).strip() if ward_match else ""
 
-    numbers = re.findall(r"\b(\d+)\b", text_lower)
-    if len(numbers) >= 2:
-        fields["total_staff"] = int(numbers[0])
-        fields["compliant_staff"] = int(numbers[1])
-        try:
-            fields["calculated_compliance"] = round((int(numbers[1]) / int(numbers[0])) * 100, 1)
-        except (ValueError, ZeroDivisionError):
-            pass
-    elif len(numbers) == 1:
-        score = int(numbers[0])
-        fields["overall_compliance_score"] = score if score <= 100 else 100
+    # ── Helper: find a score/value next to a label ─────────────────────────
+    def _find_score(labels: list[str], fallback: str = "") -> str:
+        for label in labels:
+            pattern = rf"(?i)\b{label}\s*[:\-]?\s*(\d{{1,3}}%?|yes|no|pass|fail|good|poor|satisfactory|n/?a)"
+            m = re.search(pattern, raw_text)
+            if m:
+                return m.group(1).strip()
+        return fallback
 
+    # ── Hand Hygiene ───────────────────────────────────────────────────────
+    fields["hand_hygiene"] = _find_score(
+        [r"hand\s*hygiene", r"hand\s*wash", r"hh\s*score", r"hh\s*compliance"]
+    )
+
+    # ── PPE Compliance ─────────────────────────────────────────────────────
+    fields["ppe_compliance"] = _find_score(
+        [r"ppe\s*compliance", r"ppe\s*score", "ppe", r"personal\s*protective"]
+    )
+
+    # ── Waste / Garbage Removal ────────────────────────────────────────────
+    fields["waste_garbage_removal"] = _find_score(
+        [
+            r"waste\s*/\s*garbage\s*removal",
+            r"waste\s*garbage",
+            r"waste\s*removal",
+            r"garbage\s*removal",
+            r"waste\s*segregation",
+            r"waste\s*management",
+            "waste",
+        ]
+    )
+
+    # ── Environmental Hygiene ──────────────────────────────────────────────
+    fields["environmental_hygiene"] = _find_score(
+        [
+            r"environmental\s*hygiene",
+            r"environmental\s*score",
+            r"environment\s*hygiene",
+            "environmental",
+            r"env\s*hygiene",
+        ]
+    )
+
+    # ── ICNO Additional Note ───────────────────────────────────────────────
+    note_match = re.search(
+        r"(?i)(?:note|remark|comment|additional|observation)\s*[:\-]?\s*(.+)",
+        raw_text,
+    )
+    fields["icno_additional_note"] = note_match.group(1).strip() if note_match else ""
+
+    # Keep an audit timestamp for backend reference
     fields["audit_date"] = datetime.now(timezone.utc).isoformat()
     return fields
 
@@ -277,7 +387,7 @@ def _extract_general_fields(raw_text: str) -> dict[str, Any]:
         fields["ward_id"] = ward
 
     fields["document_type"] = "General/Other"
-    fields["raw_text_preview"] = raw_text[:50] + "..." if len(raw_text) > 50 else raw_text
+    fields["raw_text_preview"] = " ".join(raw_text.split())
     return fields
 
 
@@ -401,10 +511,21 @@ def process_image(image_base64: str, form_type: str = "general") -> dict[str, An
 
     if form_type_lower == "moh_notification":
         extracted_fields = _extract_moh_fields(raw_text)
-    elif form_type_lower in ["hand_hygiene_audit", "ward_inspection"]:
+        extracted_fields["document_type"] = "MoH Notification"
+    elif form_type_lower == "hand_hygiene_audit":
         extracted_fields = _extract_audit_fields(raw_text)
+        extracted_fields["document_type"] = "Hand Hygiene Audit"
+    elif form_type_lower == "ward_inspection":
+        extracted_fields = _extract_audit_fields(raw_text)
+        extracted_fields["document_type"] = "Ward Inspection"
     else:
         extracted_fields = _extract_general_fields(raw_text)
+        extracted_fields["document_type"] = "General"
+
+    if "disease_name" not in extracted_fields:
+        extracted_fields["disease_name"] = extracted_fields.get("disease") or extracted_fields.get("pathogen_name") or "General Surveillance"
+
+    extracted_fields["raw_text_preview"] = " ".join(raw_text.split())
 
     return {
         "raw_text": raw_text,
