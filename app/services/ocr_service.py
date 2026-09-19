@@ -25,7 +25,10 @@ CONFIDENCE_THRESHOLD = 0.70  # Below this → flagged for review
 # ─── Google Cloud Vision Client Setup ─────────────────────────────────────────
 
 _vision_client = None
-
+"""
+    Lazily initializes and returns the Google Cloud Vision ImageAnnotatorClient
+    only when requested, avoiding startup overhead.
+    """
 def _get_vision_client():
     """Lazy singleton for Google Cloud Vision ImageAnnotatorClient."""
     global _vision_client
@@ -45,7 +48,10 @@ def _get_vision_client():
             _vision_client = False  # Sentinel for unavailable
     return _vision_client if _vision_client else None
 
-
+"""
+    Sends the processed image to Google Cloud Vision API using document_text_detection.
+    Extracts raw text, word-level confidence scores, and bounding box coordinates.
+    """
 def _process_with_google_vision(img_bytes: bytes) -> tuple[list[dict[str, Any]], str] | None:
     """Process image using Google Cloud Vision API."""
     client = _get_vision_client()
@@ -101,7 +107,10 @@ def _process_with_google_vision(img_bytes: bytes) -> tuple[list[dict[str, Any]],
 # ─── EasyOCR Legacy Setup ──────────────────────────────────────────────────────
 
 _ocr_reader = None
-
+"""
+    Lazily loads the EasyOCR Reader into memory as a local fallback
+    engine when Google Vision API is unavailable or offline.
+    """
 def _get_ocr_reader():
     """Lazy singleton for EasyOCR reader (heavy init ~5s)."""
     global _ocr_reader
@@ -134,7 +143,10 @@ def _decode_image(img_bytes: bytes):
     del arr
     return img
 
-
+"""
+    Detects document orientation angle using OpenCV contours and minAreaRect,
+    then rotates the image to make it straight.
+    """
 def _deskew(gray_image):
     """Correct rotation angle using OpenCV minAreaRect on thresholded contours.
 
@@ -184,7 +196,10 @@ def _deskew(gray_image):
         logger.warning("Deskew failed (non-fatal): %s", exc)
         return gray_image
 
-
+"""
+    Generates multiple enhanced image variations (Grayscale, CLAHE contrast,
+    denoising, sharpening, Otsu/adaptive thresholding) to maximize EasyOCR accuracy.
+    """
 def _preprocess_variants(img_bytes: bytes):
     """Build several OCR images for faint handwriting and camera photos.
 
@@ -245,7 +260,10 @@ def _smart_extract_ward(text_lower: str) -> str | None:
 
 
 # ─── Field Extractors ─────────────────────────────────────────────────────────
-
+"""
+    Parses full OCR text using regex and heuristics to extract Ministry of Health (MoH)
+    fields (e.g., patient details, pathogen names, admission dates).
+    """
 def _extract_moh_fields(raw_text: str) -> dict[str, Any]:
     """Extract structured MoH/lab note fields from OCR text."""
     fields: dict[str, Any] = {}
@@ -299,7 +317,10 @@ def _extract_moh_fields(raw_text: str) -> dict[str, Any]:
 
     return fields
 
-
+"""
+    Extracts ward infection-control audit metrics (e.g., Hand Hygiene, PPE compliance scores)
+    and converts them into structured numeric/boolean values.
+    """
 def _extract_audit_fields(raw_text: str) -> dict[str, Any]:
     """Extract the 6 ICNO audit fields expected by the frontend UI cards.
 
@@ -392,7 +413,10 @@ def _extract_general_fields(raw_text: str) -> dict[str, Any]:
 
 
 # ─── EasyOCR Helper Functions ─────────────────────────────────────────────────
-
+"""
+    Packages extracted tokens, confidence values, bounding boxes, and clinical fields
+    into a standardized JSON schema for frontend review and database storage.
+    """
 def _ocr_results_to_payload(results: list[tuple[Any, str, float]]) -> tuple[list[dict[str, Any]], str]:
     results = sorted(
         results,
@@ -439,7 +463,11 @@ def _score_ocr_tokens(tokens: list[dict[str, Any]], raw_text: str) -> float:
 
 
 # ─── Main OCR Pipeline ────────────────────────────────────────────────────────
-
+"""
+    Main entrypoint: Decodes the image, tries Google Cloud Vision first,
+    falls back to OpenCV + EasyOCR if needed, extracts form-specific fields,
+    and flags low-confidence tokens for human review.
+    """
 def process_image(image_base64: str, form_type: str = "general") -> dict[str, Any]:
     try:
         if "," in image_base64:
