@@ -235,6 +235,24 @@ async def doctor_acknowledge_alert(
     }
 
 
+@router.get("/management-instructions", summary="List management instructions (Doctor / ICNO / Sister)")
+async def list_management_instructions(
+    alert_id: str | None = None,
+    limit: int = 50,
+    _: TokenData = _ICNO_SISTER_DOCTOR,
+):
+    """
+    List digital management instructions issued by the Supervising Doctor.
+    """
+    bounded_limit = min(max(limit, 1), 100)
+    try:
+        return fs.list_management_instructions(alert_id=alert_id, limit=bounded_limit)
+    except Exception as exc:
+        if fallback_data.is_quota_error(exc):
+            return []
+        raise
+
+
 @router.post("/dispatch/{alert_id}", summary="Dispatch MoH notification email (ICNO only)")
 async def dispatch_alert(alert_id: str, to_email: str, _: TokenData = _ICNO_ONLY):
     """

@@ -73,7 +73,9 @@ async def get_heatmap(current_user: TokenData = _ALL_AUTH):
         audits = audits_by_ward.get(ward_id, [])
         last_audit_date = None
         if audits:
-            last_audit_date = str(audits[-1].get("created_at", ""))[:10]
+            last_audit_date = str(audits[0].get("created_at", ""))[:10]
+        elif ward.get("last_audit_at"):
+            last_audit_date = str(ward.get("last_audit_at", ""))[:10]
 
         entry = {
             "ward_id": ward_id,
@@ -81,7 +83,7 @@ async def get_heatmap(current_user: TokenData = _ALL_AUTH):
             "ward_type": ward.get("ward_type", "general"),
             "floor": ward.get("floor"),
             "risk_level": ward.get("risk_level", "low"),
-            "risk_score": round(ward.get("risk_score", 0.0), 1),
+            "risk_score": round(float(ward.get("risk_score", 0.0)), 3),
             "compliance_score": round(ward.get("compliance_score", 100.0), 1),
             "anomaly_count": anomaly_count,
             "last_audit_date": last_audit_date,

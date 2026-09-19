@@ -42,9 +42,8 @@ RF_N_ESTIMATORS = 50
 RF_RANDOM_STATE = 42
 RF_MAX_DEPTH = 10
 
-RISK_THRESHOLD_LOW = 25.0
-RISK_THRESHOLD_MEDIUM = 50.0
-RISK_THRESHOLD_HIGH = 75.0
+RISK_THRESHOLD_LOW = 33.0
+RISK_THRESHOLD_MEDIUM = 66.0
 
 ROOT_CAUSE_CACHE_SECONDS = 120
 _ROOT_CAUSE_CACHE: dict[tuple[float, float, float, int], tuple[float, list[dict[str, Any]]]] = {}
@@ -55,11 +54,11 @@ _TASK_PRIORITY_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 # ─── Helper Utilities ─────────────────────────────────────────────────────────
 
 def _risk_level_from_score(score: float) -> str:
-    if score < RISK_THRESHOLD_LOW:
+    if score < 33.0:
         return "low"
-    elif score < RISK_THRESHOLD_MEDIUM:
+    elif score < 60.0:
         return "medium"
-    elif score < RISK_THRESHOLD_HIGH:
+    elif score < 80.0:
         return "high"
     else:
         return "critical"
@@ -167,32 +166,58 @@ def detect_anomaly(pathogen_id: str, new_count: int) -> dict[str, Any]:
 
 # ─── 2. Random Forest Outbreak Risk Prediction ────────────────────────────────
 
-def _build_feature_vector(ward_id: str) -> Optional[dict[str, float]]:
+def clear_task_priority_cache() -> None:
+    _TASK_PRIORITY_CACHE.clear()
+    _ROOT_CAUSE_CACHE.clear()
+
+
+def _get_score(data_dict: dict, *keys: str, default: float = 100.0) -> float:
+    for k in keys:
+        val = data_dict.get(k)
+        if val is not None:
+            try:
+                return float(val)
+            except (ValueError, TypeError):
+                pass
+    return default
+
+
+def _build_feature_vector(ward_id: str, new_audit: Optional[dict] = None) -> Optional[dict[str, float]]:
     ward = fs.get_ward(ward_id)
     if not ward:
         return None
 
-    audits = fs.list_audits_for_ward(ward_id, limit=5)
-    if audits:
-        latest_audit = audits[-1]
-        compliance = latest_audit.get("overall_compliance_score", 100.0)
-        hand_hygiene = latest_audit.get("hand_hygiene_score", 100.0)
-        ppe_score = latest_audit.get("ppe_score", 100.0)
-        waste_score = latest_audit.get("waste_segregation_score", 100.0)
-        env_score = latest_audit.get("environmental_score", 100.0)
+    if new_audit:
+        compliance = _get_score(new_audit, "overall_compliance_score", "compliance_score", default=100.0)
+        hand_hygiene = _get_score(new_audit, "hand_hygiene_score", default=100.0)
+        ppe_score = _get_score(new_audit, "ppe_score", default=100.0)
+        waste_score = _get_score(new_audit, "waste_segregation_score", "waste_score", default=100.0)
+        env_score = _get_score(new_audit, "environmental_score", "env_score", default=100.0)
+        created_at_val = new_audit.get("created_at") or new_audit.get("audit_date") or datetime.now(timezone.utc)
     else:
-        compliance = 100.0
-        hand_hygiene = 100.0
-        ppe_score = 100.0
-        waste_score = 100.0
-        env_score = 100.0
+        audits = fs.list_audits_for_ward(ward_id, limit=5)
+        if audits:
+            latest_audit = audits[0]
+            compliance = _get_score(latest_audit, "overall_compliance_score", "compliance_score", default=100.0)
+            hand_hygiene = _get_score(latest_audit, "hand_hygiene_score", default=100.0)
+            ppe_score = _get_score(latest_audit, "ppe_score", default=100.0)
+            waste_score = _get_score(latest_audit, "waste_segregation_score", "waste_score", default=100.0)
+            env_score = _get_score(latest_audit, "environmental_score", "env_score", default=100.0)
+            created_at_val = latest_audit.get("created_at") or latest_audit.get("audit_date")
+        else:
+            compliance = 100.0
+            hand_hygiene = 100.0
+            ppe_score = 100.0
+            waste_score = 100.0
+            env_score = 100.0
+            created_at_val = None
 
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=30)
     lab_results = fs.list_lab_results(ward_id=ward_id, limit=200)
     recent_results = []
     for result in lab_results:
-        created_at = _as_datetime(result.get("created_at"))
+        created_at = _as_datetime(result.get("created_at") or result.get("result_date"))
         if created_at and created_at >= cutoff:
             recent_results.append(result)
 
@@ -208,24 +233,24 @@ def _build_feature_vector(ward_id: str) -> Optional[dict[str, float]]:
             v = _pathogen_risk_to_numeric(pathogen.get("risk_level", "low"))
             max_virulence = max(max_virulence, v)
 
+    parsed_audit_dt = _as_datetime(created_at_val) if created_at_val else None
+    days_since_last = max(0, (now - parsed_audit_dt).days) if parsed_audit_dt else 30
+
     return {
         "compliance_score": compliance,
         "hand_hygiene_score": hand_hygiene,
         "ppe_score": ppe_score,
         "waste_score": waste_score,
+        "waste_segregation_score": waste_score,
         "environmental_score": env_score,
-        "recent_lab_count": len(recent_results),
-        "anomaly_count": anomaly_count,
+        "recent_lab_count": float(len(recent_results)),
+        "anomaly_count": float(anomaly_count),
         "max_virulence": max_virulence,
-        "days_since_last_audit": (
-            (now - _as_datetime(audits[-1].get("created_at"))).days
-            if audits and _as_datetime(audits[-1].get("created_at"))
-            else 30
-        ),
+        "days_since_last_audit": float(days_since_last),
     }
 
 
-def predict_outbreak_risk(ward_id: str) -> dict[str, Any]:
+def predict_outbreak_risk(ward_id: str, new_audit: Optional[dict] = None) -> dict[str, Any]:
     import joblib
     import numpy as np
     
@@ -233,20 +258,20 @@ def predict_outbreak_risk(ward_id: str) -> dict[str, Any]:
         rf_model = joblib.load("ml_models/rf_outbreak_model.pkl")
     except Exception as e:
         logger.error(f"Failed to load pre-trained RF model: {e}")
-        return _heuristic_fallback_risk(ward_id)
+        return _heuristic_fallback_risk(ward_id, new_audit=new_audit)
 
-    target_fv = _build_feature_vector(ward_id)
+    target_fv = _build_feature_vector(ward_id, new_audit=new_audit)
     if not target_fv:
         return {"ward_id": ward_id, "risk_score": 0.0, "risk_score_percent": 0.0, "risk_level": "low",
                 "confidence": 0.0, "feature_importance": {}, "alert_created": False}
 
     feature_names = [
-        "hand_hygiene_score", "ppe_score", "waste_score", "environmental_score", 
+        "hand_hygiene_score", "ppe_score", "waste_segregation_score", "environmental_score", 
         "recent_lab_count", "anomaly_count", "max_virulence", "days_since_last_audit"
     ]
 
     target_row = np.array([[
-        float(target_fv.get(f, 0)) for f in feature_names
+        float(target_fv.get(f, target_fv.get("waste_score", 0) if f == "waste_segregation_score" else 0)) for f in feature_names
     ]], dtype=np.float32)
 
     proba = rf_model.predict_proba(target_row)[0]
@@ -254,7 +279,31 @@ def predict_outbreak_risk(ward_id: str) -> dict[str, Any]:
     risk_score_percent = risk_probability * 100
     risk_level = _risk_level_from_score(risk_score_percent)
 
-    # ── Feature Importance Extraction (NEW) ──
+    # Enforce strict compliance-to-risk rules
+    compliance_score = target_fv.get("compliance_score", 100.0)
+    if compliance_score < 33.0:
+        # Low compliance (< 33%) -> Enforce High/Critical Risk
+        if risk_score_percent < 67.0:
+            risk_score_percent = 67.0
+            risk_probability = 0.67
+        risk_level = "critical" if risk_score_percent >= 80.0 else "high"
+    elif 33.0 <= compliance_score <= 66.0:
+        # Medium compliance (33% - 66%) -> Enforce Medium Risk (33-66 range)
+        risk_level = "medium"
+        if risk_score_percent < 33.0:
+            risk_score_percent = 33.0
+            risk_probability = 0.33
+        elif risk_score_percent > 66.0 and target_fv.get("anomaly_count", 0) == 0:
+            # If no lab anomaly exists, cap compliance-driven medium risk at 66%
+            risk_score_percent = 66.0
+            risk_probability = 0.66
+    else:
+        # High compliance (> 66%)
+        if risk_level == "medium" and risk_score_percent < 33.0:
+            risk_score_percent = 33.0
+            risk_probability = 0.33
+
+    # Feature Importance Extraction
     importances = rf_model.feature_importances_
     feature_importance_dict = {
         name: round(float(imp), 4) for name, imp in zip(feature_names, importances)
@@ -289,14 +338,14 @@ def predict_outbreak_risk(ward_id: str) -> dict[str, Any]:
         "risk_score_percent": round(risk_score_percent, 2),
         "risk_level": risk_level,
         "confidence": round(float(max(proba)), 3),
-        "feature_importance": feature_importance_dict, # Included the weights!
+        "feature_importance": feature_importance_dict,
         "alert_created": alert_created,
         "model_used": "Pre-trained Random Forest (pkl)"
     }
 
-def _heuristic_fallback_risk(ward_id: str) -> dict[str, Any]:
+def _heuristic_fallback_risk(ward_id: str, new_audit: Optional[dict] = None) -> dict[str, Any]:
     ward = fs.get_ward(ward_id)
-    compliance = ward.get("compliance_score", 100.0) if ward else 100.0
+    compliance = new_audit.get("overall_compliance_score", 100.0) if new_audit else (ward.get("compliance_score", 100.0) if ward else 100.0)
     risk_score_percent = max(0.0, 100.0 - compliance)
     risk_probability = risk_score_percent / 100.0
     risk_level = _risk_level_from_score(risk_score_percent)
@@ -366,7 +415,7 @@ def calculate_task_priority(ward_ids: Optional[list[str]] = None) -> list[dict[s
             continue
 
         audits = audits_by_ward.get(wid, [])
-        latest_audit = audits[-1] if audits else {}
+        latest_audit = audits[0] if audits else {}
         compliance = latest_audit.get("overall_compliance_score", ward.get("compliance_score", 100.0))
         recent_lab = lab_by_ward.get(wid, [])
         anomaly_count = sum(

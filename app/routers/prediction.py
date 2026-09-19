@@ -73,7 +73,7 @@ async def predict_ward_risk(ward_id: str, data: WardPredictionRequest):
     return {
         "ward_id": ward_id,
         "risk_score": risk_score,
-        "risk_level": "High" if risk_score > 0.7 else "Medium" if risk_score > 0.4 else "Low",
+        "risk_level": "high" if risk_score > 0.66 else "medium" if risk_score >= 0.33 else "low",
         "message": "Outbreak prediction calculated successfully using Random Forest Model."
     }
 

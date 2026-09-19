@@ -35,11 +35,16 @@ export function reportDownloadUrl(downloadUrl: string) {
   return `${base}${downloadUrl}`;
 }
 
-export async function downloadReport(downloadUrl: string, filename = "infecsure-report") {
+export async function downloadReport(downloadUrl: string, filename = "infecsure-report.pdf") {
   const { data, headers } = await api.get<Blob>(downloadUrl, { responseType: "blob" });
   const disposition = String(headers["content-disposition"] || "");
-  const match = disposition.match(/filename="?([^"]+)"?/i);
-  const resolvedFilename = match?.[1] || filename;
+  const match = disposition.match(/filename="?([^";]+)"?/i);
+  let resolvedFilename = match?.[1] || filename;
+
+  if (!resolvedFilename.toLowerCase().endsWith(".pdf") && !resolvedFilename.toLowerCase().endsWith(".xlsx")) {
+    resolvedFilename = `${resolvedFilename}.pdf`;
+  }
+
   const objectUrl = URL.createObjectURL(data);
   const link = document.createElement("a");
   link.href = objectUrl;

@@ -9,6 +9,7 @@ import base64
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
 
+# FIX: require_rolea -> require_role බවට වෙනස් කරන ලදී
 from app.dependencies import require_role
 from app.models.auth import TokenData
 from app.models.ocr import FormType, OCRConfirmRequest, OCRScanRequest
@@ -55,16 +56,15 @@ async def scan_document(body: OCRScanRequest, current_user: TokenData = _ICNO_ON
     data = {
         "form_type": body.form_type.value,
         "reference_id": body.reference_id,
-        "raw_text": ocr_output["raw_text"],
-        "tokens": ocr_output["tokens"],
-        "low_confidence_count": ocr_output["low_confidence_count"],
-        "extracted_fields": ocr_output["extracted_fields"],
+        "raw_text": ocr_output.get("raw_text", ""),
+        "tokens": ocr_output.get("tokens", []),
+        "low_confidence_count": ocr_output.get("low_confidence_count", 0),
+        "extracted_fields": ocr_output.get("extracted_fields", {}),
         "created_by_uid": current_user.uid,
     }
 
     data = clean_data_for_firestore(data)
     scan_id = fs.create_ocr_record(data)
-    
     
     final_response = {
         "scan_id": scan_id,
@@ -76,7 +76,6 @@ async def scan_document(body: OCRScanRequest, current_user: TokenData = _ICNO_ON
         "status": "pending_review",
         "message": f"OCR complete. {ocr_output.get('low_confidence_count', 0)} token(s) flagged for review.",
     }
-    
     
     return clean_data_for_firestore(final_response)
 
