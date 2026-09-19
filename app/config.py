@@ -20,7 +20,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Application-wide settings loaded from .env"""
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     # JWT
     jwt_secret_key: str = "infecsure-production-secret-key-2026"
@@ -32,6 +36,13 @@ class Settings(BaseSettings):
     firebase_service_account_path: str = "firebase-service-account.json"
     firebase_project_id: str = "infecsure-5d901"
     firebase_web_api_key: str = ""
+
+    # Optional Startup User Seeding
+    seed_icno_password: str = ""
+    seed_sister_password: str = ""
+    seed_lab_password: str = ""
+    seed_doctor_password: str = ""
+    seed_staff_password: str = ""
 
     # Email
     smtp_host: str = "smtp.gmail.com"

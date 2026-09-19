@@ -35,6 +35,7 @@ export type AlertItem = {
   target_roles?: string[];
   source_data?: Record<string, unknown>;
   icno_notes?: string;
+  doctor_instructions?: string;
   created_at?: string;
 };
 

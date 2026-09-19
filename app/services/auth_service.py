@@ -141,7 +141,7 @@ async def seed_default_users() -> None:
 
     for user_data in DEFAULT_USERS:
         email = user_data["email"]
-        password = os.environ.get(user_data["password_env"], "")
+        password = getattr(settings, user_data["password_env"].lower(), "") or os.environ.get(user_data["password_env"], "")
         if not password:
             continue
 
