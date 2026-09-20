@@ -165,7 +165,22 @@ export function LabDashboard() {
   }, []);
 
   useEffect(() => {
+    const video = videoRef.current;
+    if (video && cameraStream) {
+      video.srcObject = cameraStream;
+      const play = () => {
+        video.play().catch((err) => {
+          console.warn("Video play error:", err);
+        });
+      };
+      video.addEventListener("loadedmetadata", play);
+      video.addEventListener("loadeddata", play);
+      play();
+    }
     return () => {
+      if (video) {
+        video.srcObject = null;
+      }
       cameraStream?.getTracks().forEach((track) => track.stop());
     };
   }, [cameraStream]);
@@ -259,25 +274,29 @@ export function LabDashboard() {
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: { facingMode: { ideal: "environment" } }
-      });
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+        });
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+      }
       setCameraStream(stream);
-      window.setTimeout(() => {
-        if (!videoRef.current) return;
-        videoRef.current.srcObject = stream;
-        videoRef.current.play().catch(() => undefined);
-      }, 0);
     } catch (err) {
       setCameraError(apiErrorMessage(err));
     }
   }
 
   function stopCamera() {
-    cameraStream?.getTracks().forEach((track) => track.stop());
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((track) => track.stop());
+    }
     setCameraStream(null);
-    if (videoRef.current) videoRef.current.srcObject = null;
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
   }
 
   async function captureCameraFrame() {
@@ -286,12 +305,18 @@ export function LabDashboard() {
     if (!video || !canvas) return;
     const width = video.videoWidth || 1280;
     const height = video.videoHeight || 720;
+    if (!width || !height) {
+      setCameraError("Camera frame is not ready yet. Please wait a moment.");
+      return;
+    }
     canvas.width = width;
     canvas.height = height;
     const context = canvas.getContext("2d");
     if (!context) return;
     context.drawImage(video, 0, 0, width, height);
-    await scanImage(canvas.toDataURL("image/jpeg", 0.92));
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+    stopCamera();
+    await scanImage(dataUrl);
   }
 
   const entrySection = (
@@ -461,13 +486,25 @@ export function LabDashboard() {
               </>
             ) : null}
           </div>
-          <p className="mt-3 text-xs font-medium text-clinical-700">Google Vision when configured, local OCR fallback in development.</p>
+          <p className="mt-3 text-xs font-medium text-clinical-700">Fast EasyOCR with OpenCV image enhancement (CLAHE, deskew, and auto-contrast).</p>
           {cameraError ? <p className="mt-3 text-sm font-semibold text-red-700">{cameraError}</p> : null}
         </div>
 
         {cameraStream ? (
-          <div className="overflow-hidden rounded-md border border-slate-200 bg-slate-950">
-            <video ref={videoRef} className="aspect-video w-full object-contain" playsInline muted />
+          <div className="relative overflow-hidden rounded-md border border-slate-200 bg-slate-950">
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="aspect-video w-full object-contain"
+              onLoadedMetadata={(e) => {
+                e.currentTarget.play().catch(() => undefined);
+              }}
+              onLoadedData={(e) => {
+                e.currentTarget.play().catch(() => undefined);
+              }}
+            />
           </div>
         ) : null}
         <canvas ref={canvasRef} className="hidden" />
