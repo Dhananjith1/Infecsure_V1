@@ -53,29 +53,24 @@ def _clean_base64_image(image_base64: str) -> bytes:
     return base64.b64decode(image_base64)
 
 
-def _google_vision_text(image_base64: str) -> str | None:
-    try:
-        from google.cloud import vision  # type: ignore  # noqa: PLC0415
-    except Exception:
-        return None
-    try:
-        image = vision.Image(content=_clean_base64_image(image_base64))
-        response = vision.ImageAnnotatorClient().text_detection(image=image)
-        if response.error.message:
-            return None
-        texts = response.text_annotations or []
-        return texts[0].description if texts else ""
-    except Exception:
-        return None
-
-
 def _match_lab_slip_fields(raw_text: str) -> dict[str, Any]:
     text_lower = raw_text.lower()
     fields: dict[str, Any] = {}
 
-    bht_match = re.search(r"(?i)\b(?:bht|bed\s*head\s*ticket|patient\s*id|ref(?:erence)?)\s*[:#-]?\s*([A-Za-z0-9/-]{2,30})", raw_text)
+    bht_match = re.search(
+        r"(?i)\b(?:bht|bed\s*head\s*ticket|patient\s*id|ref(?:erence)?|opd\s*no|reg(?:istration)?\s*no?|serial\s*no?)\s*[:#-]?\s*([A-Za-z0-9/-]{2,30})",
+        raw_text,
+    )
     if bht_match:
         fields["patient_ward_location"] = bht_match.group(1).strip()
+
+    name_match = re.search(r"(?i)\b(?:name|patient(?:\s*name)?)\s*[:#-]?\s*([A-Za-z0-9\s\.:/-]+?)(?=\s+(?:ward|bht|age|sex|result|test|date)|\r?\n|$)", raw_text)
+    if name_match:
+        name_val = name_match.group(1).strip(" :-")
+        if name_val and len(name_val) > 2:
+            fields["patient_name"] = name_val
+            if "patient_ward_location" not in fields:
+                fields["patient_ward_location"] = name_val
 
     ward_id = None
     ward_match = re.search(r"(?i)\b(?:ward|unit)\s*[:#-]?\s*([A-Za-z0-9 _/-]{2,45})", raw_text)
@@ -109,8 +104,17 @@ def _match_lab_slip_fields(raw_text: str) -> dict[str, Any]:
             "specimen_type": "other",
         })
 
-    result_match = re.search(r"(?i)\b(?:result|interpretation)\s*[:#-]?\s*(positive|negative|detected|not\s+detected|reactive|non[-\s]?reactive)", raw_text)
+    result_match = re.search(
+        r"(?i)\b(?:result|interpretation|test\s*result)\s*[:#-]?\s*(positive|negative|detected|not\s+detected|reactive|non[-\s]?reactive)",
+        raw_text,
+    )
     result_word = result_match.group(1).lower() if result_match else ""
+    if not result_word:
+        if re.search(r"(?i)\b(?:negative|not\s+detected|non[-\s]?reactive)\b", raw_text):
+            result_word = "negative"
+        elif re.search(r"(?i)\b(?:positive|detected|reactive)\b", raw_text):
+            result_word = "positive"
+
     if result_word:
         is_negative = "negative" in result_word or "not" in result_word or "non" in result_word
         fields["test_result"] = "negative" if is_negative else "positive"
@@ -121,24 +125,15 @@ def _match_lab_slip_fields(raw_text: str) -> dict[str, Any]:
 
 def _easyocr_lab_slip(image_base64: str) -> dict[str, Any]:
     result = ocr_service.process_image(image_base64, form_type="moh_notification")
-    result["engine"] = "easyocr"
+    result["engine"] = "easyocr_opencv"
     result["extracted_fields"] = {
         **result.get("extracted_fields", {}),
         **_match_lab_slip_fields(result.get("raw_text", "")),
     }
-    return result
+    return ocr_service._sanitize_for_json(result)
 
 
 def _scan_lab_slip(image_base64: str) -> dict[str, Any]:
-    raw_text = _google_vision_text(image_base64)
-    if raw_text is not None:
-        return {
-            "raw_text": raw_text,
-            "tokens": [],
-            "low_confidence_count": 0,
-            "extracted_fields": _match_lab_slip_fields(raw_text),
-            "engine": "google_vision",
-        }
     return _easyocr_lab_slip(image_base64)
 
 
@@ -169,9 +164,7 @@ async def scan_lab_slip(
     _: TokenData = _LAB_OR_ICNO,
 ):
     """
-    Extract typed lab-slip fields for rapid auto-fill. Google Vision is used when
-    its client and credentials are available; the local OCR pipeline is the
-    fallback for offline development.
+    Extract typed lab-slip fields for rapid auto-fill using the OpenCV + EasyOCR pipeline.
     """
     try:
         return await run_in_threadpool(_scan_lab_slip, body.image_base64)
@@ -192,7 +185,8 @@ async def list_lab_results(
     """
     try:
         bounded_limit = min(max(limit, 1), 100)
-        results = fs.list_lab_results(ward_id=ward_id, limit=bounded_limit)
+        entered_by_uid = current_user.uid if _is_lab_user(current_user) else None
+        results = fs.list_lab_results(ward_id=ward_id, entered_by_uid=entered_by_uid, limit=bounded_limit)
     except Exception as exc:
         if fallback_data.is_quota_error(exc):
             results = [r for r in fallback_data.LAB_RESULTS if not ward_id or r.get("ward_id") == ward_id][:bounded_limit]

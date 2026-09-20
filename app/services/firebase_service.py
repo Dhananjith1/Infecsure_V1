@@ -37,6 +37,8 @@ def _doc_to_dict(doc: DocumentSnapshot) -> Optional[dict]:
         return None
     data = doc.to_dict() or {}
     data["_id"] = doc.id
+    if "result_id" not in data:
+        data["result_id"] = doc.id
     return data
 
 
@@ -222,9 +224,17 @@ def get_lab_result(result_id: str) -> Optional[dict]:
     return get_document("lab_results", result_id)
 
 
-def list_lab_results(ward_id: Optional[str] = None, limit: int = 100) -> list[dict]:
-    filters = [("ward_id", "==", ward_id)] if ward_id else None
-    return list_collection("lab_results", filters=filters, order_by="-created_at", limit=limit)
+def list_lab_results(
+    ward_id: Optional[str] = None,
+    entered_by_uid: Optional[str] = None,
+    limit: int = 100,
+) -> list[dict]:
+    filters = []
+    if ward_id:
+        filters.append(("ward_id", "==", ward_id))
+    if entered_by_uid:
+        filters.append(("entered_by_uid", "==", entered_by_uid))
+    return list_collection("lab_results", filters=filters or None, order_by="-created_at", limit=limit)
 
 
 def count_positive_cultures_48h(ward_id: str, pathogen_id: Optional[str] = None) -> int:

@@ -22,86 +22,24 @@ logger = logging.getLogger(__name__)
 
 CONFIDENCE_THRESHOLD = 0.70  # Below this → flagged for review
 
-# ─── Google Cloud Vision Client Setup ─────────────────────────────────────────
+# ─── EasyOCR & OpenCV Pipeline Setup ──────────────────────────────────────────
 
-_vision_client = None
+_ocr_reader = None
 """
-    Lazily initializes and returns the Google Cloud Vision ImageAnnotatorClient
-    only when requested, avoiding startup overhead.
+    Lazily loads the EasyOCR Reader into memory as the primary
+    OCR engine with OpenCV preprocessing.
     """
-def _get_vision_client():
-    """Lazy singleton for Google Cloud Vision ImageAnnotatorClient."""
-    global _vision_client
-    if _vision_client is None:
+def _get_ocr_reader():
+    """Lazy singleton for EasyOCR reader (heavy init ~5s)."""
+    global _ocr_reader
+    if _ocr_reader is None:
         try:
-            from google.cloud import vision  # noqa: PLC0415
-
-            # Set Service Account Credential Path from Environment or fallback to default file
-            creds_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH", "firebase-service-account.json")
-            if os.path.exists(creds_path):
-                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = creds_path
-
-            _vision_client = vision.ImageAnnotatorClient()
-            logger.info("Google Cloud Vision API client initialized successfully.")
-        except Exception as exc:
-            logger.warning("Google Cloud Vision API initialized failed/unavailable: %s", exc)
-            _vision_client = False  # Sentinel for unavailable
-    return _vision_client if _vision_client else None
-
-"""
-    Sends the processed image to Google Cloud Vision API using document_text_detection.
-    Extracts raw text, word-level confidence scores, and bounding box coordinates.
-    """
-def _process_with_google_vision(img_bytes: bytes) -> tuple[list[dict[str, Any]], str] | None:
-    """Process image using Google Cloud Vision API."""
-    client = _get_vision_client()
-    if not client:
-        return None
-
-    try:
-        from google.cloud import vision  # noqa: PLC0415
-
-        image = vision.Image(content=img_bytes)
-        # document_text_detection handles dense text & handwriting much better than text_detection
-        response = client.document_text_detection(image=image)
-
-        if response.error.message:
-            logger.error("Google Vision Error: %s", response.error.message)
-            return None
-
-        tokens = []
-        raw_text = response.full_text_annotation.text if response.full_text_annotation else ""
-
-        # Processing detailed tokens & confidence
-        for page in response.full_text_annotation.pages:
-            for block in page.blocks:
-                for paragraph in block.paragraphs:
-                    for word in paragraph.words:
-                        word_text = "".join([symbol.text for symbol in word.symbols])
-                        confidence = float(word.confidence) if hasattr(word, "confidence") and word.confidence else 0.90
-
-                        # Calculate Bounding Box
-                        vertices = word.bounding_box.vertices
-                        x_coords = [v.x for v in vertices if hasattr(v, "x")]
-                        y_coords = [v.y for v in vertices if hasattr(v, "y")]
-
-                        if x_coords and y_coords:
-                            flat_bbox = [min(x_coords), min(y_coords), max(x_coords), max(y_coords)]
-                        else:
-                            flat_bbox = [0, 0, 0, 0]
-
-                        tokens.append({
-                            "text": word_text,
-                            "confidence": round(confidence, 3),
-                            "bbox": flat_bbox,
-                            "needs_review": confidence < CONFIDENCE_THRESHOLD,
-                        })
-
-        return tokens, raw_text
-
-    except Exception as e:
-        logger.warning("Google Cloud Vision processing failed, falling back to EasyOCR: %s", e)
-        return None
+            import easyocr  # noqa: PLC0415
+            _ocr_reader = easyocr.Reader(["en"], gpu=False, verbose=False)
+        except ImportError:
+            logging.warning("EasyOCR not available — OCR pipeline disabled.")
+            _ocr_reader = False
+    return _ocr_reader if _ocr_reader else None
 
 
 # ─── EasyOCR Legacy Setup ──────────────────────────────────────────────────────
@@ -196,48 +134,34 @@ def _deskew(gray_image):
         logger.warning("Deskew failed (non-fatal): %s", exc)
         return gray_image
 
-"""
-    Generates multiple enhanced image variations (Grayscale, CLAHE contrast,
-    denoising, sharpening, Otsu/adaptive thresholding) to maximize EasyOCR accuracy.
-    """
-def _preprocess_variants(img_bytes: bytes):
-    """Build several OCR images for faint handwriting and camera photos.
-
-    Pipeline: decode → resize → grayscale → deskew → CLAHE → denoise →
-    sharpen → adaptive threshold / Otsu threshold.
-    """
+def _preprocess_image(img_bytes: bytes):
+    """Build optimized grayscale + deskewed + CLAHE image for fast, accurate EasyOCR."""
     try:
         import cv2  # noqa: PLC0415
     except ImportError:
-        return [("raw", _decode_image(img_bytes))]
+        return _decode_image(img_bytes)
 
     img = _decode_image(img_bytes)
     if img is None:
-        return [("raw", img_bytes)]
+        return img_bytes
 
     height, width = img.shape[:2]
-    scale = 2.0 if max(height, width) < 1800 else 1.35
-    enlarged = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
-    gray = cv2.cvtColor(enlarged, cv2.COLOR_BGR2GRAY)
+    max_dim = max(height, width)
 
-    # Deskew the grayscale image before further processing
+    # Scale to optimal OCR dimension (1200 - 1600 px) for speed and high accuracy
+    if max_dim > 1600:
+        scale = 1600.0 / max_dim
+        img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+    elif max_dim < 900:
+        scale = 1200.0 / max_dim
+        img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img
     gray = _deskew(gray)
 
-    clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8)).apply(gray)
-    denoised = cv2.fastNlMeansDenoising(clahe, None, 12, 7, 21)
-    sharpened = cv2.addWeighted(denoised, 1.55, cv2.GaussianBlur(denoised, (0, 0), 3), -0.55, 0)
-
-    adaptive = cv2.adaptiveThreshold(
-        sharpened, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 9
-    )
-    _, otsu = cv2.threshold(sharpened, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-    return [
-        ("enlarged_color", enlarged),
-        ("sharpened_gray", sharpened),
-        ("adaptive_threshold", adaptive),
-        ("otsu_threshold", otsu),
-    ]
+    # Enhance contrast using CLAHE (Contrast Limited Adaptive Histogram Equalization)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    return clahe.apply(gray)
 
 
 # ─── Master Ward Detector ────────────────────────────────────────────────────
@@ -445,12 +369,37 @@ def _ocr_results_to_payload(results: list[tuple[Any, str, float]]) -> tuple[list
         ]
         tokens.append({
             "text": clean_text,
-            "confidence": round(float(confidence), 3),
+            "confidence": float(round(float(confidence), 3)),
             "bbox": flat_bbox,
-            "needs_review": confidence < CONFIDENCE_THRESHOLD,
+            "needs_review": bool(confidence < CONFIDENCE_THRESHOLD),
         })
     raw_text = " ".join(raw_parts).replace("\n ", "\n").replace(" \n", "\n")
     return tokens, raw_text
+
+
+def _sanitize_for_json(data: Any) -> Any:
+    """Recursively converts numpy types and non-JSON-serializable objects into standard Python types."""
+    try:
+        import numpy as np  # noqa: PLC0415
+        if isinstance(data, np.generic):
+            return data.item()
+        if isinstance(data, np.ndarray):
+            return [_sanitize_for_json(i) for i in data.tolist()]
+    except ImportError:
+        pass
+
+    if isinstance(data, dict):
+        return {str(k): _sanitize_for_json(v) for k, v in data.items()}
+    elif isinstance(data, (list, tuple, set)):
+        return [_sanitize_for_json(i) for i in data]
+    elif hasattr(data, "item") and callable(getattr(data, "item")):
+        try:
+            return data.item()
+        except Exception:
+            pass
+    elif isinstance(data, (bool, int, float, str)) or data is None:
+        return data
+    return data
 
 
 def _score_ocr_tokens(tokens: list[dict[str, Any]], raw_text: str) -> float:
@@ -459,7 +408,7 @@ def _score_ocr_tokens(tokens: list[dict[str, Any]], raw_text: str) -> float:
     avg_confidence = sum(float(token["confidence"]) for token in tokens) / max(len(tokens), 1)
     useful_tokens = sum(1 for token in tokens if re.search(r"[A-Za-z]{2,}|\d+", token["text"]))
     label_bonus = sum(10 for label in ("ward", "word", "pathogen", "specimen", "colony", "count") if label in raw_text.lower())
-    return letters + (digits * 0.5) + (avg_confidence * 20) + (useful_tokens * 5) + label_bonus
+    return float(letters + (digits * 0.5) + (avg_confidence * 20) + (useful_tokens * 5) + label_bonus)
 
 
 # ─── Main OCR Pipeline ────────────────────────────────────────────────────────
@@ -479,55 +428,36 @@ def process_image(image_base64: str, form_type: str = "general") -> dict[str, An
     tokens = []
     raw_text = ""
 
-    # 1. Attempt Google Cloud Vision API
-    google_res = _process_with_google_vision(img_bytes)
-
-    if google_res is not None:
-        tokens, raw_text = google_res
-        logger.info("Successfully processed image using Google Cloud Vision API.")
-    else:
-        # 2. Fallback to EasyOCR pipeline
-        logger.info("Using EasyOCR fallback pipeline...")
-        reader = _get_ocr_reader()
-        variants = _preprocess_variants(img_bytes)
-
-        if reader is not None:
-            best_score = -1.0
-            best_variant = ""
-            for variant_name, image in variants:
-                try:
-                    results = reader.readtext(
-                        image,
-                        detail=1,
-                        paragraph=False,
-                        decoder="beamsearch",
-                        batch_size=1,
-                        contrast_ths=0.05,
-                        adjust_contrast=0.7,
-                        text_threshold=0.3,
-                        low_text=0.2,
-                        link_threshold=0.2,
-                        canvas_size=2560,
-                        mag_ratio=2.0,
-                        width_ths=1.2,
-                        add_margin=0.15,
-                    )
-                except Exception as exc:
-                    logger.warning("OCR variant %s failed: %s", variant_name, exc)
-                    continue
-                candidate_tokens, candidate_text = _ocr_results_to_payload(results)
-                score = _score_ocr_tokens(candidate_tokens, candidate_text)
-                if score > best_score:
-                    tokens = candidate_tokens
-                    raw_text = candidate_text
-                    best_score = score
-                    best_variant = variant_name
-            logger.info("OCR selected variant=%s score=%.2f text=%r", best_variant, best_score, raw_text[:160])
-        else:
-            raw_text = "[OCR ENGINE UNAVAILABLE]"
+    reader = _get_ocr_reader()
+    if reader is not None:
+        try:
+            processed_img = _preprocess_image(img_bytes)
+            # Fast, accurate EasyOCR with greedy decoder (CPU-optimized ~2-4s)
+            results = reader.readtext(
+                processed_img,
+                detail=1,
+                paragraph=False,
+                decoder="greedy",
+                batch_size=1,
+                contrast_ths=0.05,
+                adjust_contrast=0.7,
+                text_threshold=0.3,
+                low_text=0.2,
+                link_threshold=0.2,
+                canvas_size=1600,
+                mag_ratio=1.0,
+                width_ths=1.0,
+                add_margin=0.1,
+            )
+            tokens, raw_text = _ocr_results_to_payload(results)
+            logger.info("EasyOCR processed %d tokens, text=%r", len(tokens), raw_text[:160])
+        except Exception as exc:
+            logger.error("EasyOCR processing failed: %s", exc)
+            raw_text = ""
             tokens = []
-
-        del variants
+    else:
+        raw_text = "[OCR ENGINE UNAVAILABLE]"
+        tokens = []
 
     del img_bytes
     gc.collect()
@@ -555,9 +485,9 @@ def process_image(image_base64: str, form_type: str = "general") -> dict[str, An
 
     extracted_fields["raw_text_preview"] = " ".join(raw_text.split())
 
-    return {
+    return _sanitize_for_json({
         "raw_text": raw_text,
         "tokens": tokens,
         "low_confidence_count": low_confidence_count,
         "extracted_fields": extracted_fields,
-    }
+    })

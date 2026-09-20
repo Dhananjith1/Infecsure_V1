@@ -221,7 +221,7 @@ export function LabDashboard() {
       });
       return {
         ...current,
-        bht_number: String(fields.patient_ward_location || current.bht_number),
+        bht_number: String(fields.patient_ward_location || fields.patient_name || current.bht_number),
         ward_id: String(fields.ward_id || current.ward_id),
         test_type_id: matchedTest?.id || current.test_type_id,
         specimen_type: String(fields.specimen_type || matchedTest?.specimen || current.specimen_type),
