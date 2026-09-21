@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, TrendingUp } from "lucide-react";
 import { getRootCauseInsights, listAlerts } from "../../api/alerts";
-import { getHeatmap, getPublicHeatmap } from "../../api/heatmap";
+import { getHeatmapWithFallback } from "../../api/heatmap";
 import { listLabResults } from "../../api/lab";
 import { apiErrorMessage } from "../../api/client";
 import { Button } from "../../components/Button";
@@ -26,20 +26,11 @@ export function Surveillance() {
     const nextErrors: string[] = [];
 
     try {
-      const publicHeatmap = await getPublicHeatmap();
-      setWards(publicHeatmap.heatmap || []);
+      const data = await getHeatmapWithFallback();
+      setWards(data.heatmap || []);
     } catch (error) {
       setWards([]);
-      nextErrors.push(`Public heatmap request failed: ${apiErrorMessage(error)}`);
-    }
-
-    setLoading(false);
-
-    try {
-      const protectedHeatmap = await getHeatmap();
-      if (protectedHeatmap.heatmap?.length) setWards(protectedHeatmap.heatmap);
-    } catch (error) {
-      nextErrors.push(`Protected heatmap request failed, showing validated public heatmap: ${apiErrorMessage(error)}`);
+      nextErrors.push(`Heatmap request failed: ${apiErrorMessage(error)}`);
     }
 
     try {

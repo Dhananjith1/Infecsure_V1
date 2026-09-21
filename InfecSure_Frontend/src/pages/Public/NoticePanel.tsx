@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, ShieldCheck } from "lucide-react";
-import { getPublicHeatmap } from "../../api/heatmap";
+import { getHeatmapWithFallback } from "../../api/heatmap";
 import { listNotices } from "../../api/notices";
 import { Card, CardBody, CardHeader } from "../../components/Card";
 import { HeatmapGrid } from "../../components/HeatmapGrid";
@@ -12,7 +12,7 @@ export function NoticePanel() {
 
   useEffect(() => {
     listNotices().then(setNotices).catch(() => setNotices([]));
-    getPublicHeatmap().then((data) => setWards(data.heatmap || [])).catch(() => setWards([]));
+    getHeatmapWithFallback().then((data) => setWards(data.heatmap || [])).catch(() => setWards([]));
   }, []);
 
   return (
@@ -25,7 +25,7 @@ export function NoticePanel() {
       <Card>
         <CardHeader title="Hospital Risk Map" description="Validated ward-level risk status for staff awareness." />
         <CardBody>
-          <HeatmapGrid wards={wards} publicMode />
+          <HeatmapGrid wards={wards} />
         </CardBody>
       </Card>
 

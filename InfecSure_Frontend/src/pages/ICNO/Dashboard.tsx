@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { BarChart3, Camera, ClipboardCheck, LayoutDashboard, ShieldCheck, TrendingUp } from "lucide-react";
 import { dashboardSummary, getRootCauseInsights, listPendingAlerts } from "../../api/alerts";
-import { getHeatmap, getPublicHeatmap } from "../../api/heatmap";
+import { getHeatmapWithFallback } from "../../api/heatmap";
 import { getPriorityList } from "../../api/audits";
 import { Button } from "../../components/Button";
 import { Card, CardBody, CardHeader } from "../../components/Card";
@@ -34,19 +34,14 @@ export function ICNODashboard() {
     async function loadHeatmap() {
       setHeatmapLoading(true);
       try {
-        const publicHeatmap = await getPublicHeatmap();
-        if (!mounted) return;
-        setWards(publicHeatmap.heatmap || []);
-        setHeatmapLoading(false);
+        const data = await getHeatmapWithFallback();
+        if (mounted) {
+          setWards(data.heatmap || []);
+        }
       } catch {
+        if (mounted) setWards([]);
+      } finally {
         if (mounted) setHeatmapLoading(false);
-      }
-
-      try {
-        const protectedHeatmap = await getHeatmap();
-        if (mounted && protectedHeatmap.heatmap?.length) setWards(protectedHeatmap.heatmap);
-      } catch {
-        // Keep the already-loaded public heatmap.
       }
     }
 

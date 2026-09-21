@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getPublicHeatmap } from "../../api/heatmap";
+import { getHeatmapWithFallback } from "../../api/heatmap";
 import { Card, CardBody, CardHeader } from "../../components/Card";
 import { HeatmapGrid } from "../../components/HeatmapGrid";
 import type { HeatmapWard } from "../../types";
@@ -8,7 +8,7 @@ export function HeatmapView() {
   const [wards, setWards] = useState<HeatmapWard[]>([]);
 
   useEffect(() => {
-    getPublicHeatmap().then((data) => setWards(data.heatmap || [])).catch(() => setWards([]));
+    getHeatmapWithFallback().then((data) => setWards(data.heatmap || [])).catch(() => setWards([]));
   }, []);
 
   return (
@@ -19,7 +19,7 @@ export function HeatmapView() {
       </div>
       <Card>
         <CardHeader title="Hospital Risk Map" />
-        <CardBody><HeatmapGrid wards={wards} publicMode /></CardBody>
+        <CardBody><HeatmapGrid wards={wards} /></CardBody>
       </Card>
     </div>
   );
