@@ -38,12 +38,17 @@ InfecSure verifies email/password login through Firebase Authentication.
 Set `FIREBASE_WEB_API_KEY` in `.env`, and store each user's role in the
 Firestore `users` collection.
 
+| Email / Username | Password | Role / Description | Target Dashboard |
+| :--- | :--- | :--- | :--- |
+| `icno@infecsure.com` | `icno@123` | ICNO Officer | `/icno/dashboard` |
+| `matron@infecsure.com` | `sister@123` | Nursing Sister (Matron) | `/sister/dashboard` |
+| `lab@infecsure.com` | `lab@123` | Lab Technician | `/lab/dashboard` |
+| `doctor@infecsure.com` | `doctor@123` | Supervising Doctor | `/doctor/dashboard` |
+| `staff@infecsure.com` | `staff@123` | Hospital Staff | `/staff/dashboard` |
+
 Optional startup seed accounts use the `SEED_ICNO_PASSWORD`,
 `SEED_SISTER_PASSWORD`, `SEED_LAB_PASSWORD`, `SEED_DOCTOR_PASSWORD`, and
 `SEED_STAFF_PASSWORD` environment variables. Leave them blank to skip seeding.
-
----
-
 ## 📡 API Endpoints
 
 ### Authentication
