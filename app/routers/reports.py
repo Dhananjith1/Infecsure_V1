@@ -131,15 +131,16 @@ def _safe_create_report_record(data: dict) -> None:
 
 
 def _find_report_record(report_id: str) -> dict | None:
+    clean_id = report_id[:-4] if report_id.lower().endswith(".pdf") or report_id.lower().endswith(".xlsx") else report_id
     try:
-        record = fs.get_report_record(report_id)
+        record = fs.get_report_record(clean_id) or fs.get_report_record(report_id)
     except Exception as exc:
         if not fallback_data.is_quota_error(exc):
             raise
         record = None
     if record:
         return record
-    download_path = f"/reports/download/{report_id}"
+    download_path = f"/reports/download/{clean_id}"
     try:
         reports = fs.list_reports(limit=100)
     except Exception as exc:
@@ -148,16 +149,22 @@ def _find_report_record(report_id: str) -> dict | None:
         reports = []
     for item in reports:
         filename = str(item.get("filename") or "")
-        if item.get("download_url") == download_path or filename.startswith(report_id):
+        item_id = str(item.get("report_id") or "")
+        if (
+            item.get("download_url") == download_path
+            or item_id == clean_id
+            or filename.startswith(clean_id)
+            or filename == report_id
+        ):
             return item
-    local_matches = list(REPORTS_DIR.glob(f"{report_id}.*"))
+    local_matches = list(REPORTS_DIR.glob(f"{clean_id}.*")) or list(REPORTS_DIR.glob(f"{report_id}.*"))
     if local_matches:
         filepath = local_matches[0]
         return {
-            "report_id": report_id,
-            "report_type": ReportType.EXECUTIVE_SUMMARY.value,
+            "report_id": clean_id,
+            "report_type": "dengue_weekly" if clean_id.startswith("dengue") else ReportType.EXECUTIVE_SUMMARY.value,
             "format": ReportFormat.PDF.value if filepath.suffix.lower() == ".pdf" else ReportFormat.EXCEL.value,
-            "download_url": download_path,
+            "download_url": f"/reports/download/{clean_id}",
             "filename": filepath.name,
         }
     return None
@@ -165,36 +172,54 @@ def _find_report_record(report_id: str) -> dict | None:
 
 def _report_filepath(record: dict, report_id: str) -> Path:
     filename = record.get("filename")
-    if not filename:
-        extension = "pdf" if record.get("format") == ReportFormat.PDF.value else "xlsx"
-        filename = f"{report_id}.{extension}"
-        record["filename"] = filename
-    return REPORTS_DIR / filename
+    if filename and (REPORTS_DIR / filename).exists():
+        return REPORTS_DIR / filename
+
+    clean_id = report_id[:-4] if report_id.lower().endswith(".pdf") or report_id.lower().endswith(".xlsx") else report_id
+    matches = list(REPORTS_DIR.glob(f"{clean_id}*")) or list(REPORTS_DIR.glob(f"{report_id}*"))
+    if matches:
+        return matches[0]
+
+    extension = "pdf" if record.get("format") == ReportFormat.PDF.value or str(record.get("report_type", "")).startswith("dengue") else "xlsx"
+    return REPORTS_DIR / f"{clean_id}.{extension}"
 
 
 def _regenerate_executive_file(record: dict, filepath: Path, current_user: TokenData) -> None:
-    if record.get("report_type") not in {ReportType.EXECUTIVE_SUMMARY.value, "executive_summary"}:
-        return
-
-    wards = _safe_list_wards()
-    alerts = _safe_list_alerts(status="approved")
-    lab_results = _safe_list_lab_results(limit=500)
+    report_type = record.get("report_type", "")
     user_name = _safe_user_name(current_user)
 
-    if filepath.suffix.lower() == ".pdf":
-        file_bytes = report_service.generate_executive_pdf(
-            wards=wards,
-            alerts=alerts,
-            audit_summary=[],
-            generated_by=user_name,
-        )
-    else:
-        file_bytes = report_service.generate_executive_excel(
-            wards=wards,
-            alerts=alerts,
-            lab_results=lab_results,
-        )
-    filepath.write_bytes(file_bytes)
+    if report_type in {ReportType.EXECUTIVE_SUMMARY.value, "executive_summary"}:
+        wards = _safe_list_wards()
+        alerts = _safe_list_alerts(status="approved")
+        lab_results = _safe_list_lab_results(limit=500)
+        if filepath.suffix.lower() == ".pdf":
+            file_bytes = report_service.generate_executive_pdf(
+                wards=wards,
+                alerts=alerts,
+                audit_summary=[],
+                generated_by=user_name,
+            )
+        else:
+            file_bytes = report_service.generate_executive_excel(
+                wards=wards,
+                alerts=alerts,
+                lab_results=lab_results,
+            )
+        filepath.write_bytes(file_bytes)
+    elif str(report_type).startswith("dengue"):
+        alerts = _safe_list_alerts(status="approved")
+        lab_results = _safe_list_lab_results(limit=100)
+        audits = _safe_list_audits(limit=100)
+        summary_alert = {
+            "title": "Dengue Clinical Report",
+            "description": "Dengue clinical report generated for outbreak response monitoring.",
+            "severity": "high",
+            "status": "approved",
+            "ward_id": "hospital-wide",
+            "icno_notes": "Automatically rendered clinical report.",
+        }
+        file_bytes = report_service.generate_dengue_pdf(summary_alert, lab_results, user_name, audits=audits)
+        filepath.write_bytes(file_bytes)
 
 
 @router.get("/", summary="List generated reports (Sister / ICNO / Doctor)")

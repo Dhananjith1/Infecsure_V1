@@ -16,10 +16,10 @@ wards = ["etu", "male_ward", "female_ward", "opd", "family_medical_clinic", "psy
 for i in range(3000):
     ward = random.choice(wards)
     
-    hygiene = int(np.random.beta(8, 2) * 100)
-    ppe = int(np.random.beta(8, 2) * 100)
-    waste = int(np.random.beta(8, 2) * 100)
-    env_score = int(np.random.beta(8, 2) * 100)
+    hygiene = int(random.uniform(0, 100))
+    ppe = int(random.uniform(0, 100))
+    waste = int(random.uniform(0, 100))
+    env_score = int(random.uniform(0, 100))
     
     lab_count = random.randint(0, 20)
     anomaly_count = random.randint(0, 5)

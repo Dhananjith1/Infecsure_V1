@@ -318,8 +318,14 @@ def generate_dengue_pdf(alert: dict, lab_results: list[dict], generated_by: str,
     if audits:
         audit_data = [["Ward", "Overall", "Hand Hygiene", "PPE", "Waste", "Environment", "Date"]]
         for audit in audits[:20]:
+            ward_raw = str(audit.get("ward_id", "N/A"))
+            if len(ward_raw) > 20 and "-" in ward_raw:
+                ward_name = f"ward_{ward_raw[:8]}"
+            else:
+                ward_name = ward_raw.replace("_", " ").title() if "_" in ward_raw else ward_raw
+
             audit_data.append([
-                audit.get("ward_id", "N/A"),
+                ward_name,
                 f"{float(audit.get('overall_compliance_score', 0) or 0):.1f}%",
                 f"{float(audit.get('hand_hygiene_score', 0) or 0):.1f}%",
                 f"{float(audit.get('ppe_score', 0) or 0):.1f}%",
@@ -327,7 +333,7 @@ def generate_dengue_pdf(alert: dict, lab_results: list[dict], generated_by: str,
                 f"{float(audit.get('environmental_score', 0) or 0):.1f}%",
                 str(audit.get("created_at", audit.get("audit_date", "")))[:10],
             ])
-        audit_table = Table(audit_data, colWidths=[3*cm, 2.2*cm, 2.5*cm, 2*cm, 2*cm, 2.5*cm, 2.5*cm])
+        audit_table = Table(audit_data, colWidths=[3.2*cm, 2.0*cm, 2.5*cm, 1.8*cm, 1.8*cm, 2.7*cm, 2.4*cm])
         audit_table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#16213e")),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),

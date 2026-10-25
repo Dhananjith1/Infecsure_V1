@@ -35,9 +35,9 @@ def _resolve_ward_id(payload: dict[str, Any]) -> None:
     payload["ward_name"] = normalized
 
 
-def _run_risk_prediction(ward_id: str) -> Optional[dict[str, Any]]:
+def _run_risk_prediction(ward_id: str, new_audit: Optional[dict] = None) -> Optional[dict[str, Any]]:
     try:
-        return ml_service.predict_outbreak_risk(ward_id)
+        return ml_service.predict_outbreak_risk(ward_id, new_audit=new_audit)
     except Exception:
         return None
 
@@ -78,17 +78,30 @@ def create_lab_result(
     result_id = fs.create_lab_result(data)
 
     alert_id = None
-    if anomaly["is_anomaly"]:
+    is_positive = str(body.test_result).strip().lower() == "positive"
+
+    if anomaly["is_anomaly"] or is_positive:
+        if anomaly["is_anomaly"]:
+            title = f"Pathogen Anomaly - {body.pathogen_name} in {ward.get('name', body.ward_id)}"
+            description = anomaly["message"]
+            severity = anomaly["severity"] or "warning"
+        else:
+            title = f"New Lab Result Flagged - {body.pathogen_name} in {ward.get('name', body.ward_id)}"
+            description = f"Positive {body.pathogen_name} result recorded for BHT {body.patient_ward_location or 'N/A'}. Pending ICNO review."
+            severity = "medium"
+
         alert_id = fs.create_alert({
-            "alert_type": "anomaly",
+            "alert_type": "lab_result",
             "ward_id": body.ward_id,
-            "title": f"Pathogen Anomaly - {body.pathogen_name} in {ward.get('name', body.ward_id)}",
-            "description": anomaly["message"],
-            "severity": anomaly["severity"] or "warning",
+            "title": title,
+            "description": description,
+            "severity": severity,
             "source_data": {
                 "result_id": result_id,
                 "pathogen_id": body.pathogen_id,
                 "pathogen_name": body.pathogen_name,
+                "test_result": body.test_result,
+                "patient_ward_location": body.patient_ward_location,
                 "z_score": anomaly["z_score"],
                 "colony_count": colony_count,
             },
@@ -168,7 +181,17 @@ def create_audit(
             "target_roles": ["icno", "sister"],
         })
 
-    risk_prediction = _run_risk_prediction(body.ward_id)
+    risk_prediction = _run_risk_prediction(body.ward_id, data)
+    # Ensure ward document is updated with the latest risk info before returning.
+    if risk_prediction:
+        fs.update_ward_risk(
+            body.ward_id,
+            risk_prediction.get("risk_score", 0.0),
+            risk_prediction.get("risk_level", "low"),
+            data.get("overall_compliance_score", 100.0),
+        )
+
+    ml_service.clear_task_priority_cache()
 
     return {
         "audit_id": audit_id,

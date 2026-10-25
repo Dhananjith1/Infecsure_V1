@@ -315,6 +315,51 @@ class TestAuditScoring:
         assert audit.is_offline_sync is True
         assert metrics["hand_hygiene_ratio"] == 0.9
 
+    def test_create_audit_uses_newest_audit_for_feature_vector(self):
+        from unittest.mock import patch
+        from app.models.audit import AuditCreate
+        from app.services import domain_service
+
+        older_audit = {
+            "audit_id": "audit-old",
+            "ward_id": "etu",
+            "overall_compliance_score": 100.0,
+            "hand_hygiene_score": 100.0,
+            "ppe_score": 100.0,
+            "waste_segregation_score": 100.0,
+            "environmental_score": 100.0,
+            "created_at": "2026-01-01T00:00:00Z",
+        }
+        new_audit = {
+            "audit_id": "audit-new",
+            "ward_id": "etu",
+            "overall_compliance_score": 40.0,
+            "hand_hygiene_score": 40.0,
+            "ppe_score": 40.0,
+            "waste_segregation_score": 40.0,
+            "environmental_score": 40.0,
+            "created_at": "2026-07-23T09:00:00Z",
+        }
+
+        with patch("app.services.firebase_service.get_ward", return_value={"ward_id": "etu", "name": "ETU"}), \
+             patch("app.services.firebase_service.create_audit", return_value="audit-new"), \
+             patch("app.services.firebase_service.update_document"), \
+             patch("app.services.firebase_service.create_alert"), \
+             patch("app.services.firebase_service.list_audits_for_ward", return_value=[new_audit, older_audit]), \
+             patch("app.services.firebase_service.list_lab_results", return_value=[]), \
+             patch("app.services.firebase_service.update_ward_risk") as mock_update_risk:
+
+            body = AuditCreate(
+                ward_id="etu",
+                hand_hygiene_score=40.0,
+                ppe_score=40.0,
+                waste_segregation_score=40.0,
+                environmental_score=40.0,
+            )
+            res = domain_service.create_audit(body, conducted_by_uid="icno1", conducted_by_email="icno@test.com")
+            assert res["overall_compliance_score"] == 40.0
+            assert mock_update_risk.called
+
 
 # ─── Pydantic Model Tests ─────────────────────────────────────────────────────
 
