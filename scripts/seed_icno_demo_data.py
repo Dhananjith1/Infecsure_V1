@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import os
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -221,6 +222,10 @@ def seed_alerts() -> None:
 
 
 def main() -> None:
+    if os.environ.get("INFEC_SURE_ALLOW_DEMO_SEEDING", "").lower() != "true":
+        raise SystemExit("Refusing to write synthetic demo records. Set INFEC_SURE_ALLOW_DEMO_SEEDING=true only for a development/demo Firebase project.")
+    if os.environ.get("APP_ENV", "development").lower() == "production":
+        raise SystemExit("Demo seeding is disabled when APP_ENV=production.")
     seed_wards()
     seed_pathogens()
     seed_audits()

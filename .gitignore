@@ -40,3 +40,18 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# Frontend dependencies and generated output
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+*.log
+
+# Environment variants (keep example templates)
+.env.*
+!.env.example
+!**/.env.example
+
+# Firebase service-account credentials
+firebase-service-account*.json

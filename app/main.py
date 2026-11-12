@@ -62,7 +62,6 @@ app = FastAPI(
     version="1.0.0",
     contact={
         "name": "InfecSure Dev Team — IIT 04",
-        "email": "iit22006@std.uwu.ac.lk",
     },
     license_info={"name": "Academic Project — UWU IIT 372-2"},
     lifespan=lifespan,
@@ -132,9 +131,10 @@ async def health():
         db.collection("_health").limit(1).get()
         db_status = "connected"
         db_detail = None
-    except Exception as exc:
+    except Exception:
+        logger.warning("Firebase health check failed.", exc_info=True)
         db_status = "error"
-        db_detail = str(exc)
+        db_detail = "Database connection check failed; see server logs."
 
     return {
         "status": "ok" if db_status == "connected" else "degraded",

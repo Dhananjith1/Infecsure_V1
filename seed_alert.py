@@ -1,18 +1,26 @@
+import os
+
+if os.environ.get("INFEC_SURE_ALLOW_DEMO_SEEDING", "").lower() != "true":
+    raise SystemExit("Refusing to write a demo alert. Set INFEC_SURE_ALLOW_DEMO_SEEDING=true only for a development/demo Firebase project.")
+if os.environ.get("APP_ENV", "development").lower() == "production":
+    raise SystemExit("Demo seeding is disabled when APP_ENV=production.")
+
 from google.cloud import firestore
 
-# 1. Credentials ෆයිල් එක කෙලින්ම දෙන්න
-db = firestore.Client.from_service_account_json("firebase-service-account.json")
+# This script writes synthetic test content; never point it at a production project.
+db = firestore.Client.from_service_account_json(
+    os.environ.get("FIREBASE_SERVICE_ACCOUNT_PATH", "firebase-service-account.json")
+)
 
-# 2. බොරු Alert එකක් Database එකට දැමීම
 alert_id = "TEST-ALERT-123"
 alert_data = {
     "id": alert_id,
     "ward": "Ward 04 (General)",
-    "message": "High risk of Dengue outbreak detected.",
+    "message": "Synthetic test alert; not a real clinical signal.",
     "risk_score": 85.0,
-    "status": "approved"
+    "status": "pending",
+    "source": "demo_seed_script",
 }
 
-# 3. Firestore එකට Save කිරීම
 db.collection("alerts").document(alert_id).set(alert_data)
-print(f"Success! {alert_id} කියලා Alert එකක් Database එකට දැම්මා.")
+print(f"Seeded synthetic demo alert: {alert_id}")

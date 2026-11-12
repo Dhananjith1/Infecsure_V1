@@ -15,5 +15,11 @@ services:
     envVars:
       - key: FIREBASE_SERVICE_ACCOUNT_JSON
         sync: false  # Set this secret in the Render dashboard
+      - key: FIREBASE_WEB_API_KEY
+        sync: false  # Set this in the Render dashboard
+      - key: JWT_SECRET_KEY
+        sync: false  # Generate a strong random value; do not commit it
+      - key: CORS_ORIGINS
+        sync: false  # Set to the exact deployed frontend origin(s)
       - key: APP_ENV
         value: production

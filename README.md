@@ -1,189 +1,167 @@
-# InfecSure Backend — README
+# InfecSure — Infection Monitoring Academic Prototype
 
-## AI-Powered Infection Monitoring and Outbreak Response System
-**Divisional Hospital, Thalangama, Colombo, Sri Lanka**  
+**Full-stack academic project**  
 *IIT 372-2 Group Project — IIT 04 | Uva Wellassa University*
 
----
+InfecSure is an academic prototype for infection-control workflow support. The repository contains a FastAPI backend, a React + TypeScript frontend, sample data, and machine-learning artefacts.
 
-## 🚀 Quick Start
+> **Important:** This is an academic prototype, not a clinically validated medical device or a production hospital system. Do not use it to diagnose, treat, triage, or make real patient-care decisions. Do not upload real patient or identifiable health information to this repository. Review datasets and obtain appropriate approval before using any non-synthetic data.
 
-### 1. Prerequisites
-- Python 3.9+
-- pip
+## Quick Start
 
-### 2. Install Dependencies
+### Requirements
+
+- Python 3.11
+- Node.js 22 or later and npm
+- Firebase project credentials for authenticated backend features
+
+### 1. Backend
+
+From the repository root:
+
 ```bash
-cd "c:\Users\TUF\OneDrive\Desktop\Infecture demo"
+python -m venv .venv
+```
+
+Activate the environment:
+
+```powershell
+# Windows PowerShell
+.venv\Scripts\Activate.ps1
+```
+
+```bash
+# macOS / Linux
+source .venv/bin/activate
+```
+
+Install dependencies:
+
+```bash
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 3. Configure Environment
-Copy `.env.example` to `.env` and fill in the values (already done with defaults).
+Copy `.env.example` to `.env`. Generate a strong local JWT signing key:
 
-### 4. Run the Server
 ```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
-### 5. Access Interactive API Docs
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
+Put the generated value in `JWT_SECRET_KEY` in your local `.env`. Configure `FIREBASE_WEB_API_KEY` and either a local Firebase service-account file or `FIREBASE_SERVICE_ACCOUNT_JSON` in your environment. **Never commit `.env` or service-account JSON files.**
 
----
+Start the backend:
 
-## 🔑 Default Login Credentials
-
-InfecSure verifies email/password login through Firebase Authentication.
-Set `FIREBASE_WEB_API_KEY` in `.env`, and store each user's role in the
-Firestore `users` collection.
-
-Optional startup seed accounts use the `SEED_ICNO_PASSWORD`,
-`SEED_SISTER_PASSWORD`, `SEED_LAB_PASSWORD`, `SEED_DOCTOR_PASSWORD`, and
-`SEED_STAFF_PASSWORD` environment variables. Leave them blank to skip seeding.
-
----
-
-## 📡 API Endpoints
-
-### Authentication
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/auth/login` | Login → returns JWT tokens |
-| POST | `/auth/refresh` | Refresh access token |
-| GET  | `/auth/me` | Current user profile |
-
-### Ward Management
-| Method | Endpoint | Access |
-|--------|----------|--------|
-| GET | `/wards/` | All roles |
-| POST | `/wards/` | ICNO only |
-| GET | `/wards/{id}` | All roles |
-| PUT | `/wards/{id}` | ICNO only |
-| DELETE | `/wards/{id}` | ICNO only |
-| POST | `/wards/{id}/predict` | ICNO only — triggers Random Forest |
-
-### Ward Audits
-| Method | Endpoint | Access |
-|--------|----------|--------|
-| POST | `/audits/` | ICNO only |
-| GET | `/audits/` | All roles |
-| GET | `/audits/priority-list` | ICNO only — Heuristic Engine |
-| GET | `/audits/{id}` | All roles |
-
-### Laboratory Results
-| Method | Endpoint | Access |
-|--------|----------|--------|
-| POST | `/lab-results/` | Lab / ICNO — triggers Z-Score |
-| GET | `/lab-results/` | All roles (Staff: masked) |
-| GET | `/lab-results/{id}` | All roles (Staff: masked) |
-
-### Pathogens
-| Method | Endpoint | Access |
-|--------|----------|--------|
-| GET | `/pathogens/` | All roles |
-| POST | `/pathogens/` | ICNO / Lab |
-| GET/PUT/DELETE | `/pathogens/{id}` | ICNO only (write) |
-| GET | `/pathogens/{id}/stats` | All roles |
-
-### Alerts (ICNO Validation Gate)
-| Method | Endpoint | Access |
-|--------|----------|--------|
-| GET | `/alerts/` | ICNO (all), Sister/Doctor (approved) |
-| POST | `/alerts/validate/{id}` | ICNO only |
-| POST | `/alerts/reject/{id}` | ICNO only |
-| POST | `/alerts/dispatch/{id}` | ICNO only — sends MoH email |
-| GET | `/alerts/analytics/root-cause` | ICNO only — Apriori |
-| GET | `/alerts/analytics/dashboard` | ICNO / Sister |
-
-### OCR Pipeline
-| Method | Endpoint | Access |
-|--------|----------|--------|
-| POST | `/ocr/scan` | ICNO only |
-| GET | `/ocr/queue` | ICNO only |
-| POST | `/ocr/confirm` | ICNO only |
-| GET | `/ocr/{scan_id}` | ICNO only |
-
-### Reports
-| Method | Endpoint | Access |
-|--------|----------|--------|
-| GET | `/reports/` | ICNO / Sister |
-| POST | `/reports/executive` | ICNO / Sister — PDF/Excel |
-| POST | `/reports/dengue` | ICNO / Doctor |
-| GET | `/reports/download/{id}` | ICNO / Sister |
-
-### Hospital Heatmap
-| Method | Endpoint | Access |
-|--------|----------|--------|
-| GET | `/heatmap/` | All roles |
-| POST | `/heatmap/refresh` | ICNO only — Re-runs all RF predictions |
-
-### Common Notices
-| Method | Endpoint | Access |
-|--------|----------|--------|
-| GET | `/notices/` | All roles |
-| POST | `/notices/` | ICNO / Sister |
-| DELETE | `/notices/{id}` | ICNO only |
-
----
-
-## 🤖 AI/ML Algorithms
-
-| Algorithm | Trigger | Purpose |
-|-----------|---------|---------|
-| **Z-Score Anomaly Detection** | Every `POST /lab-results/` | Detects statistical pathogen "trend breaks" |
-| **Random Forest Classifier** | `POST /wards/{id}/predict` or heatmap refresh | Ward-level outbreak risk prediction |
-| **Risk-Weighted Heuristic** | `GET /audits/priority-list` | ICNO daily task prioritization P=(w1·C)+(w2·V)+(w3·L) |
-| **Apriori Algorithm** | `GET /alerts/analytics/root-cause` | Mine audit failure → pathogen associations |
-
----
-
-## 🗄️ Firestore Collections
-
-| Collection | Purpose |
-|-----------|---------|
-| `users` | User profiles + role assignments |
-| `wards` | Hospital ward registry |
-| `audits` | Digital ward inspection records |
-| `lab_results` | Microbiology test results |
-| `pathogens` | Pathogen catalogue |
-| `pathogen_stats` | Z-Score rolling statistics |
-| `alerts` | AI-generated alerts + validation state |
-| `ocr_queue` | OCR confidence review queue |
-| `reports` | Generated report metadata |
-| `notices` | Common notice panel entries |
-
----
-
-## 🔒 Security Features
-- JWT with **15-minute** access token expiry
-- Refresh token (7-day expiry)
-- Role-Based Access Control (RBAC) on every endpoint
-- **ICNO Validation Gate** — AI outputs never shared without human approval
-- Patient data masking for Staff/Public roles
-- HTTPS enforced at deployment (Render)
-- Pydantic strict input validation on all request bodies
-
----
-
-## 🧪 Running Tests
 ```bash
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+API documentation: `http://127.0.0.1:8000/docs`.
+
+### 2. Frontend
+
+In a second terminal:
+
+```bash
+cd InfecSure_Frontend
+npm ci
+```
+
+Copy `InfecSure_Frontend/.env.example` to `InfecSure_Frontend/.env` and set `VITE_API_BASE_URL=http://127.0.0.1:8000`. Then run:
+
+```bash
+npm run dev
+```
+
+The Vite development server normally opens at `http://127.0.0.1:5173`.
+
+## Main Modules
+
+- Authentication and role-based access for ICNO, Sister, Lab, Doctor, and Staff roles
+- Ward management and digital ward audits
+- Laboratory results and pathogen records
+- Alert review, validation, and dispatch workflows
+- OCR scan review and confirmation
+- Reports, notices, and ward heatmap views
+
+## AI / Analytics Components
+
+| Component | Purpose |
+|---|---|
+| Z-Score anomaly detection | Flags unusual changes in pathogen result trends |
+| Random Forest classifier | Estimates ward-level outbreak risk from model inputs |
+| Risk-weighted heuristic | Helps order infection-control audit priorities |
+| Apriori association mining | Explores associations between audit failures and pathogen records |
+
+These are project features and model outputs for academic evaluation. They are not validated clinical predictions.
+
+## Data Model
+
+The backend uses Firestore collections for `users`, `wards`, `audits`, `lab_results`, `pathogens`, `pathogen_stats`, `alerts`, `ocr_queue`, `reports`, and `notices`.
+
+## API Overview
+
+The API includes routes for:
+
+- `/auth` — login, token refresh, and current-user profile
+- `/users` — user profile administration
+- `/wards` — ward records and predictions
+- `/audits` — ward inspections and priority lists
+- `/lab-results` and `/pathogens` — laboratory and pathogen records
+- `/alerts` and `/gate` — alert review and validation
+- `/ocr` — OCR scan queue and confirmation
+- `/reports` — report generation and downloads
+- `/heatmap` and `/notices` — visual summaries and notices
+
+Interactive API documentation is generated by FastAPI at `/docs`.
+
+## Checks and Tests
+
+Backend unit tests:
+
+```bash
+pip install pytest
 pytest tests/ -v
 ```
 
+Frontend production build:
+
+```bash
+cd InfecSure_Frontend
+npm ci
+npm run build
+```
+
+`npm run test:endpoints` is an optional live API smoke test. It needs a running backend and test credentials supplied through environment variables. Keep write operations disabled unless using an isolated demo environment.
+
+GitHub Actions runs backend unit tests and the frontend production build on pushes and pull requests.
+
+## Security and Privacy
+
+- JWT signing uses `JWT_SECRET_KEY`. Set a strong, private value in deployment; the generated development fallback is not a replacement for a configured production secret.
+- Firebase Admin access requires service-account credentials supplied outside the repository.
+- Demo-account creation requires explicit `SEED_*` environment variables.
+- Demo-data scripts require `INFEC_SURE_ALLOW_DEMO_SEEDING=true` and refuse to run when `APP_ENV=production`.
+- The default CORS configuration allows the local Vite development origins and the example hosted frontend. Set `CORS_ORIGINS` to the exact origins you use.
+- Authentication and role checks are implemented in the application code, but this repository has not undergone an independent security audit.
+
+## Deployment
+
+### Backend (Render)
+
+The included `render.yaml` defines the backend service. Set these as private environment variables in the Render dashboard:
+
+- `FIREBASE_SERVICE_ACCOUNT_JSON`
+- `FIREBASE_WEB_API_KEY`
+- `JWT_SECRET_KEY` — generate a strong random value
+- `CORS_ORIGINS` — JSON array containing the exact frontend origin
+
+Keep `APP_ENV=production`. Never put secrets in `render.yaml`, source code, or commit history.
+
+### Frontend
+
+Build the Vite app with `npm run build` from `InfecSure_Frontend`. Configure `VITE_API_BASE_URL` to the deployed backend URL in your frontend hosting provider. This is a Vite variable; it is not `REACT_APP_API_URL`.
+
 ---
 
-## 🌐 Deployment
-
-### Render (Backend)
-1. Set environment variables on Render dashboard
-2. Set `FIREBASE_SERVICE_ACCOUNT_JSON` to the contents of the service account JSON
-3. Build command: `pip install -r requirements.txt`
-4. Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-
-### Firebase Hosting (Frontend)
-- Frontend (React.js) connects to the Render backend URL via `REACT_APP_API_URL`
-
----
-
-*InfecSure v1.0 — IIT 04 | Uva Wellassa University of Sri Lanka — 2026*
+*InfecSure academic prototype — IIT 04 | Uva Wellassa University*

@@ -1,18 +1,22 @@
-import random
 import requests
 import os
 from datetime import datetime, timezone
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = os.environ.get("INFECSURE_API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+
+if os.environ.get("INFEC_SURE_ALLOW_DEMO_SEEDING", "").lower() != "true":
+    raise SystemExit("Refusing to write demo data. Set INFEC_SURE_ALLOW_DEMO_SEEDING=true only for a development/demo environment.")
+if os.environ.get("APP_ENV", "development").lower() == "production":
+    raise SystemExit("Demo seeding is disabled when APP_ENV=production.")
 
 print("🔑 Logging in to get access token...")
 login_data = {
-    "email": os.environ.get("SEED_LOGIN_EMAIL", "icno@infecsure.com"),
+    "email": os.environ.get("SEED_LOGIN_EMAIL", "").strip(),
     "password": os.environ.get("SEED_ICNO_PASSWORD", ""),
 }
-if not login_data["password"]:
-    print("Set SEED_ICNO_PASSWORD before running seed_data.py.")
-    exit()
+new_user_password = os.environ.get("SEED_NEW_USER_PASSWORD", "")
+if not login_data["email"] or not login_data["password"] or not new_user_password:
+    raise SystemExit("Set SEED_LOGIN_EMAIL, SEED_ICNO_PASSWORD and SEED_NEW_USER_PASSWORD before running seed_data.py.")
 
 try:
     login_response = requests.post(f"{BASE_URL}/auth/login", json=login_data)
@@ -42,7 +46,7 @@ def sub_post(label, endpoint, payload):
 # ── 1. USERS ──────────────────────────────────────────────────
 user_res = sub_post("1. Users", "/users/", {
     "email": f"staff_{datetime.now().strftime('%H%M%S')}@infecsure.com",
-    "password": os.environ.get("SEED_NEW_USER_PASSWORD", "ChangeMe123!"),
+    "password": new_user_password,
     "role": "icno",
     "full_name": "Officer Smith"
 })

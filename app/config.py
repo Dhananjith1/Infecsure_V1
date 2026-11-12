@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 from functools import lru_cache
 from pathlib import Path
 
 import firebase_admin
 from firebase_admin import credentials, firestore, auth as firebase_auth
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,7 +25,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     # JWT
-    jwt_secret_key: str = "infecsure-production-secret-key-2026"
+    # Use a fresh per-process key locally when no environment value is supplied.
+    # Set JWT_SECRET_KEY in deployment to keep tokens valid across restarts.
+    jwt_secret_key: str = Field(default_factory=lambda: secrets.token_urlsafe(48))
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
@@ -41,7 +45,7 @@ class Settings(BaseSettings):
 
     # App
     app_env: str = "development"
-    cors_origins: list[str] = ["http://localhost:3000", "https://infecsure.web.app"]
+    cors_origins: list[str] = Field(default_factory=lambda: ["http://127.0.0.1:5173", "http://localhost:5173", "https://infecsure.web.app"])
 
 
 @lru_cache()
