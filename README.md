@@ -134,7 +134,7 @@ npm run build
 
 `npm run test:endpoints` is an optional live API smoke test. It needs a running backend and test credentials supplied through environment variables. Keep write operations disabled unless using an isolated demo environment.
 
-GitHub Actions runs backend unit tests and the frontend production build on pushes and pull requests.
+GitHub Actions runs backend unit tests using `requirements-ci.txt` (the OCR engine is excluded from this lightweight test environment because the service lazy-loads it) and builds the frontend on pushes and pull requests. The full `requirements.txt` retains the OCR dependencies for a complete application installation.
 
 ## Security and Privacy
 
