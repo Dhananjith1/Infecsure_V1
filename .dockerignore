@@ -12,3 +12,18 @@ docs/
 __pycache__/
 local_test_images/
 sample_data.csv
+
+# Local configuration and Firebase credentials (never include in deployment context)
+.env
+.env.*
+**/.env
+**/.env.*
+**/*service-account*.json
+*.pem
+*.p12
+*.pfx
+
+# Large local build output
+**/node_modules/
+**/.venv/
+**/venv/

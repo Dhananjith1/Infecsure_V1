@@ -1,23 +1,37 @@
-import smtplib
+"""Check SMTP authentication without sending an email or printing credentials."""
+from __future__ import annotations
+
 import os
+import smtplib
+
 from dotenv import load_dotenv
 
-# .env ෆයිල් එක කියවීම
-load_dotenv()
 
-SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
-SMTP_USER = os.getenv("SMTP_USER")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
+def main() -> None:
+    load_dotenv()
 
-print(f"ඔයාගේ ඊමේල් එක: {SMTP_USER}")
-print("Gmail සර්වර් එකට සම්බන්ධ වීමට උත්සාහ කරයි...")
+    host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    port_value = os.getenv("SMTP_PORT", "587")
+    username = os.getenv("SMTP_USER", "").strip()
+    password = os.getenv("SMTP_PASSWORD", "")
 
-try:
-    server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
-    server.starttls() # ආරක්ෂිත කනෙක්ෂන් එකක් හැදීම
-    server.login(SMTP_USER, SMTP_PASSWORD)
-    print("✅ Success! Gmail එකට සාර්ථකව ලොග් වුණා. පාස්වර්ඩ් එක හරි!")
-    server.quit()
-except Exception as e:
-    print(f"❌ Error එකක් ආවා: {e}")
+    if not username or not password:
+        raise SystemExit("Set SMTP_USER and SMTP_PASSWORD in your local environment first.")
+
+    try:
+        port = int(port_value)
+    except ValueError as exc:
+        raise SystemExit("SMTP_PORT must be a valid integer.") from exc
+
+    try:
+        with smtplib.SMTP(host, port, timeout=15) as server:
+            server.starttls()
+            server.login(username, password)
+        print("SMTP authentication succeeded. No email was sent.")
+    except (OSError, smtplib.SMTPException) as exc:
+        print(f"SMTP authentication failed ({type(exc).__name__}). Check your local SMTP settings.")
+        raise SystemExit(1) from None
+
+
+if __name__ == "__main__":
+    main()

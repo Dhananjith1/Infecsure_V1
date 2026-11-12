@@ -140,7 +140,7 @@ GitHub Actions runs backend unit tests using `requirements-ci.txt` (the OCR engi
 
 - JWT signing uses `JWT_SECRET_KEY`. Set a strong, private value in deployment; the generated development fallback is not a replacement for a configured production secret.
 - Firebase Admin access requires service-account credentials supplied outside the repository.
-- Demo-account creation requires explicit `SEED_*` environment variables.
+- Demo-account creation is disabled by default. It runs only when `INFEC_SURE_ALLOW_DEMO_SEEDING=true`, the required `SEED_*` variables are set, and `APP_ENV` is not `production`.
 - Demo-data scripts require `INFEC_SURE_ALLOW_DEMO_SEEDING=true` and refuse to run when `APP_ENV=production`.
 - The default CORS configuration allows the local Vite development origins and the example hosted frontend. Set `CORS_ORIGINS` to the exact origins you use.
 - Authentication and role checks are implemented in the application code, but this repository has not undergone an independent security audit.

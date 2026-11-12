@@ -133,9 +133,15 @@ DEFAULT_USERS = [
 
 async def seed_default_users() -> None:
     """
-    Idempotently create configured default accounts.
-    Passwords must come from SEED_* environment variables.
+    Idempotently create configured demo accounts for isolated non-production use.
+
+    Seeding is opt-in and is always disabled in production.
     """
+    if os.environ.get("INFEC_SURE_ALLOW_DEMO_SEEDING", "").strip().lower() != "true":
+        return
+    if settings.app_env.strip().lower() == "production":
+        return
+
     users_ref = db.collection("users")
     seeded_count = 0
 

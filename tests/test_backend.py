@@ -465,3 +465,30 @@ class TestRouteContracts:
             )
         assert resp.status_code == 200
         assert resp.json()["status"] == "approved"
+
+
+# ─── Demo Seeding Safety Tests ────────────────────────────────────────────────
+
+class TestDemoSeedingSafety:
+    @pytest.mark.asyncio
+    async def test_default_account_seeding_is_disabled_without_explicit_flag(self, monkeypatch):
+        from app.services import auth_service
+
+        monkeypatch.delenv("INFEC_SURE_ALLOW_DEMO_SEEDING", raising=False)
+        mocked_db = Mock()
+        with patch.object(auth_service, "db", mocked_db):
+            await auth_service.seed_default_users()
+
+        mocked_db.collection.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_default_account_seeding_is_disabled_in_production(self, monkeypatch):
+        from app.services import auth_service
+
+        monkeypatch.setenv("INFEC_SURE_ALLOW_DEMO_SEEDING", "true")
+        monkeypatch.setattr(auth_service.settings, "app_env", "production")
+        mocked_db = Mock()
+        with patch.object(auth_service, "db", mocked_db):
+            await auth_service.seed_default_users()
+
+        mocked_db.collection.assert_not_called()
