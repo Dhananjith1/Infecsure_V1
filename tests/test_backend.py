@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import AsyncMock, patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock, patch
 
 from app.main import app
 from app.services.auth_service import create_access_token
@@ -115,15 +116,16 @@ class TestAuth:
     def test_role_resolution_requires_profile_or_custom_claim(self):
         from app.services.auth_service import role_from_authenticated_user
 
-        with patch("app.services.auth_service.auth_client.get_user", side_effect=Exception("missing")):
+        mocked_auth = SimpleNamespace(get_user=Mock(side_effect=Exception("missing")))
+        with patch("app.services.auth_service.auth_client", mocked_auth):
             assert role_from_authenticated_user(None, "uid-1") is None
 
     def test_role_resolution_accepts_custom_claim(self):
-        from types import SimpleNamespace
         from app.services.auth_service import role_from_authenticated_user
 
         fb_user = SimpleNamespace(custom_claims={"role": "doctor"})
-        with patch("app.services.auth_service.auth_client.get_user", return_value=fb_user):
+        mocked_auth = SimpleNamespace(get_user=Mock(return_value=fb_user))
+        with patch("app.services.auth_service.auth_client", mocked_auth):
             assert role_from_authenticated_user(None, "uid-1") == "doctor"
 
     def test_me_without_token(self):
